@@ -1,4 +1,4 @@
-// models/Attendance.js
+//models/Attendance
 const mongoose = require('mongoose');
 
 const attendanceSchema = new mongoose.Schema({
@@ -65,21 +65,20 @@ const attendanceSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index for efficient queries
+// Indexes for efficient queries
 attendanceSchema.index({ userId: 1, employeeId: 1, date: 1 }, { unique: true });
 attendanceSchema.index({ userId: 1, date: 1 });
 attendanceSchema.index({ employeeId: 1, date: -1 });
 
-// Virtual for formatted check-in time
-attendanceSchema.virtual('checkInDateTime').get(function() {
+// Virtuals
+attendanceSchema.virtual('checkInDateTime').get(function () {
   if (this.date && this.checkInTime) {
     return new Date(`${this.date}T${this.checkInTime}:00`);
   }
   return null;
 });
 
-// Virtual for formatted check-out time
-attendanceSchema.virtual('checkOutDateTime').get(function() {
+attendanceSchema.virtual('checkOutDateTime').get(function () {
   if (this.date && this.checkOutTime) {
     return new Date(`${this.date}T${this.checkOutTime}:00`);
   }
@@ -87,12 +86,12 @@ attendanceSchema.virtual('checkOutDateTime').get(function() {
 });
 
 // Method to calculate work duration
-attendanceSchema.methods.calculateDuration = function() {
+attendanceSchema.methods.calculateDuration = function () {
   if (this.checkInTime && this.checkOutTime) {
     const checkIn = new Date(`${this.date}T${this.checkInTime}:00`);
     const checkOut = new Date(`${this.date}T${this.checkOutTime}:00`);
     const diffMs = checkOut - checkIn;
-    
+
     if (diffMs > 0) {
       const hours = Math.floor(diffMs / (1000 * 60 * 60));
       const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -103,7 +102,7 @@ attendanceSchema.methods.calculateDuration = function() {
 };
 
 // Pre-save middleware to calculate duration
-attendanceSchema.pre('save', function(next) {
+attendanceSchema.pre('save', function (next) {
   if (this.checkInTime && this.checkOutTime && !this.duration) {
     this.duration = this.calculateDuration();
   }

@@ -1,16 +1,15 @@
-// middleware/auth.js (Fixed version)
+// middleware/auth.js
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
 // Main authentication middleware
 const auth = async (req, res, next) => {
   try {
-    // Get token from header
     const authHeader = req.header('Authorization');
-    const token = authHeader && authHeader.startsWith('Bearer ') 
-      ? authHeader.substring(7) 
+    const token = authHeader && authHeader.startsWith('Bearer ')
+      ? authHeader.substring(7)
       : null;
-    
+
     if (!token) {
       return res.status(401).json({
         success: false,
@@ -18,10 +17,8 @@ const auth = async (req, res, next) => {
       });
     }
 
-    // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-    
-    // Find user and check if still exists and is active
+
     const user = await User.findById(decoded.userId).select('-password');
     if (!user) {
       return res.status(401).json({
@@ -37,10 +34,9 @@ const auth = async (req, res, next) => {
       });
     }
 
-    // Add user to request object - keeping consistent with your server.js
     req.user = {
       userId: user._id.toString(),
-      id: user._id.toString(), // Adding both for compatibility
+      id: user._id.toString(),
       email: user.email,
       role: user.role,
       name: user.name,
@@ -59,7 +55,7 @@ const auth = async (req, res, next) => {
         message: 'Invalid token format.'
       });
     }
-    
+
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({
         success: false,
@@ -74,7 +70,7 @@ const auth = async (req, res, next) => {
   }
 };
 
-// Role-based access control middleware
+// Role-based access control
 const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
@@ -96,19 +92,14 @@ const authorize = (...roles) => {
 };
 
 // Admin only middleware
-const adminOnly = (req, res, next) => {
-  return authorize('admin')(req, res, next);
-};
+const adminOnly = (req, res, next) => authorize('admin')(req, res, next);
 
-// User only middleware  
-const userOnly = (req, res, next) => {
-  return authorize('user')(req, res, next);
-};
+// User only middleware
+const userOnly = (req, res, next) => authorize('user')(req, res, next);
 
-// Export middleware functions
-module.exports = { 
-  auth, 
-  authorize, 
-  adminOnly, 
-  userOnly 
+module.exports = {
+  auth,
+  authorize,
+  adminOnly,
+  userOnly
 };

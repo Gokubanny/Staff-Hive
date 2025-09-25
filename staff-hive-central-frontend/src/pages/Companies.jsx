@@ -1,3 +1,4 @@
+//pages/companies
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
@@ -151,7 +152,7 @@ export default function Companies() {
                   : 'Start by adding your first company to the directory.'}
               </p>
               {!searchTerm && (
-                <Button onClick={() => navigate('/dashboard/add-company')}>
+                <Button onClick={() => navigate('/add-companies')}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add First Company
                 </Button>

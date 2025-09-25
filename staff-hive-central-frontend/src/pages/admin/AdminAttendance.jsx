@@ -1,50 +1,25 @@
 // src/components/AdminAttendance.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card, CardContent, CardDescription, CardHeader, CardTitle
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
-import { 
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle
 } from '@/components/ui/dialog';
-import { 
-  Users,
-  Clock,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  Calendar,
-  Download,
-  Search,
-  Filter,
-  Eye,
-  TrendingUp,
-  MapPin,
-  Timer,
-  Activity,
-  BarChart3,
-  RefreshCw,
-  UserCheck,
-  Building2,
-  FileText,
-  Settings,
-  Wifi,
-  WifiOff
+import {
+  Users, Clock, CheckCircle, XCircle, AlertCircle, Calendar, Download, Search, Filter, Eye,
+  TrendingUp, MapPin, Timer, Activity, BarChart3, RefreshCw, UserCheck, Settings, Wifi, WifiOff
 } from 'lucide-react';
 import { useAttendance } from '../../contexts/AttendanceContext';
+
 const AdminAttendance = () => {
   const navigate = useNavigate();
   const {
@@ -52,12 +27,11 @@ const AdminAttendance = () => {
     isLoading,
     error,
     getAllAttendanceByDate,
-    getAttendanceStats,
     calculateDuration,
     clearError
   } = useAttendance();
 
-  // State management
+  // State
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -74,299 +48,162 @@ const AdminAttendance = () => {
   });
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  // Department list for filtering
   const departments = ['Engineering', 'Design', 'Marketing', 'HR', 'Sales', 'Operations', 'Finance'];
 
-  // Monitor online status
+  // --- Functions ---
+  const calculateStats = useCallback((data) => {
+    if (!Array.isArray(data)) return;
+
+    const present = data.length;
+    const checkedOut = data.filter(r => r.checkOutTime && r.checkOutTime !== '--').length;
+    const stillWorking = present - checkedOut;
+
+    const completedRecords = data.filter(r => r.checkInTime && r.checkInTime !== '--' && r.checkOutTime && r.checkOutTime !== '--');
+    let totalMinutes = 0;
+    completedRecords.forEach(r => {
+      const duration = calculateDuration(r.checkInTime, r.checkOutTime);
+      const parts = duration.match(/(\d+)h (\d+)m/);
+      if (parts) totalMinutes += parseInt(parts[1]) * 60 + parseInt(parts[2]);
+    });
+
+    const avgMinutes = completedRecords.length ? totalMinutes / completedRecords.length : 0;
+    const avgHours = Math.floor(avgMinutes / 60);
+    const avgMins = Math.round(avgMinutes % 60);
+    const averageWorkTime = `${avgHours}h ${avgMins}m`;
+
+    const onTimeCount = data.filter(r => {
+      if (!r.checkInTime || r.checkInTime === '--') return false;
+      const [h, m] = r.checkInTime.split(':').map(Number);
+      return h < 9 || (h === 9 && m === 0);
+    }).length;
+    const onTimeRate = present ? Math.round((onTimeCount / present) * 100) : 100;
+
+    setDailyStats({ totalEmployees: present, present, checkedOut, stillWorking, averageWorkTime, onTimeRate });
+  }, [calculateDuration]);
+
+  const determineStatus = useCallback(record => {
+    if (!record.checkInTime || record.checkInTime === '--') return 'absent';
+    if (record.checkInTime && record.checkOutTime && record.checkOutTime !== '--') return 'completed';
+    return 'working';
+  }, []);
+
+  const getStatusColor = useCallback(status => {
+    switch (status) {
+      case 'working': return 'bg-green-100 text-green-800 border-green-200';
+      case 'completed': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'absent': return 'bg-red-100 text-red-800 border-red-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  }, []);
+
+  const getStatusIcon = useCallback(status => {
+    switch (status) {
+      case 'working': return <Activity className="h-4 w-4 text-green-600" />;
+      case 'completed': return <CheckCircle className="h-4 w-4 text-blue-600" />;
+      case 'absent': return <XCircle className="h-4 w-4 text-red-600" />;
+      default: return <Clock className="h-4 w-4 text-gray-600" />;
+    }
+  }, []);
+
+  const openDetailsDialog = useCallback(record => {
+    setSelectedRecord(record);
+    setShowDetailsDialog(true);
+  }, []);
+
+  const formatDate = useCallback(date => new Date(date).toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  }), []);
+
+  const exportData = useCallback(() => {
+    if (!attendanceRecords.length) return alert('No attendance data to export');
+
+    const csv = [
+      ['Employee ID', 'Name', 'Department', 'Check In', 'Check Out', 'Duration', 'Location', 'Status'].join(','),
+      ...attendanceRecords.map(r => [
+        r.employeeId || '', r.name || '', r.department || '', r.checkInTime || '',
+        r.checkOutTime || '', calculateDuration(r.checkInTime, r.checkOutTime),
+        r.location || '', determineStatus(r)
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `attendance-${selectedDate}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [attendanceRecords, selectedDate, calculateDuration, determineStatus]);
+
+  const filteredData = attendanceRecords.filter(r => {
+    const matchesSearch = r.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.employeeId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.department?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesDept = filterDepartment === 'all' || r.department === filterDepartment;
+    const matchesStatus = filterStatus === 'all' || determineStatus(r) === filterStatus;
+    return matchesSearch && matchesDept && matchesStatus;
+  });
+
+  // --- Effects ---
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
-  // Load attendance data when date changes
-  useEffect(() => {
-    loadAttendanceData();
-  }, [selectedDate]);
-
-  // Listen for real-time updates
-  useEffect(() => {
-    const handleAttendanceUpdate = (event) => {
-      if (event.detail && Array.isArray(event.detail)) {
-        calculateStats(event.detail);
-      }
-    };
-
-    window.addEventListener('attendanceUpdated', handleAttendanceUpdate);
-    
-    return () => {
-      window.removeEventListener('attendanceUpdated', handleAttendanceUpdate);
-    };
-  }, []);
-
-  // Calculate statistics whenever attendance records change
-  useEffect(() => {
-    calculateStats(attendanceRecords);
-  }, [attendanceRecords]);
-
-  const loadAttendanceData = useCallback(async () => {
+  const refreshData = useCallback(async () => {
+    clearError();
     try {
       const data = await getAllAttendanceByDate(selectedDate);
       calculateStats(data);
-    } catch (error) {
-      console.error('Error loading attendance data:', error);
+    } catch (err) {
+      console.error('Error loading attendance:', err);
     }
-  }, [selectedDate, getAllAttendanceByDate]);
+  }, [selectedDate, getAllAttendanceByDate, calculateStats, clearError]);
 
-  const calculateStats = useCallback((data) => {
-    if (!Array.isArray(data)) return;
 
-    const present = data.length;
-    const checkedOut = data.filter(record => 
-      record.checkOutTime && record.checkOutTime !== '--'
-    ).length;
-    const stillWorking = present - checkedOut;
-
-    // Calculate average work time for completed days
-    const completedRecords = data.filter(record => 
-      record.checkInTime !== '--' && record.checkOutTime && record.checkOutTime !== '--'
-    );
-
-    let totalMinutes = 0;
-    completedRecords.forEach(record => {
-      const duration = calculateDuration(record.checkInTime, record.checkOutTime);
-      if (duration !== '--' && duration !== 'Working...') {
-        const parts = duration.match(/(\d+)h (\d+)m/);
-        if (parts) {
-          totalMinutes += parseInt(parts[1]) * 60 + parseInt(parts[2]);
-        }
-      }
-    });
-
-    const averageMinutes = completedRecords.length > 0 ? totalMinutes / completedRecords.length : 0;
-    const avgHours = Math.floor(averageMinutes / 60);
-    const avgMins = Math.round(averageMinutes % 60);
-    const averageWorkTime = `${avgHours}h ${avgMins}m`;
-
-    // Calculate on-time rate (assuming 9:00 AM is on time)
-    const onTimeCount = data.filter(record => {
-      if (!record.checkInTime || record.checkInTime === '--') return false;
-      const [hours, minutes] = record.checkInTime.split(':').map(Number);
-      return hours < 9 || (hours === 9 && minutes === 0);
-    }).length;
-    
-    const onTimeRate = present > 0 ? Math.round((onTimeCount / present) * 100) : 100;
-
-    setDailyStats({
-      totalEmployees: present,
-      present,
-      checkedOut,
-      stillWorking,
-      averageWorkTime,
-      onTimeRate
-    });
-  }, [calculateDuration]);
-
-  const refreshData = async () => {
-    clearError();
-    await loadAttendanceData();
-  };
-
-  const exportData = useCallback(async () => {
-    if (attendanceRecords.length === 0) {
-      alert('No attendance data to export');
-      return;
-    }
-
-    try {
-      const exportData = {
-        date: selectedDate,
-        records: filteredData,
-        statistics: dailyStats,
-        filters: { searchTerm, filterDepartment, filterStatus },
-        exportDate: new Date().toISOString(),
-        totalRecords: filteredData.length
-      };
-
-      // Create CSV content
-      const csvContent = [
-        ['Employee ID', 'Name', 'Department', 'Check In', 'Check Out', 'Duration', 'Location', 'Status'].join(','),
-        ...filteredData.map(record => [
-          record.employeeId || '',
-          record.name || '',
-          record.department || '',
-          record.checkInTime || '',
-          record.checkOutTime || '',
-          calculateDuration(record.checkInTime, record.checkOutTime),
-          record.location || '',
-          determineStatus(record)
-        ].join(','))
-      ].join('\n');
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `attendance-${selectedDate}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error exporting data:', error);
-      alert('Failed to export data. Please try again.');
-    }
-  }, [attendanceRecords, filteredData, dailyStats, searchTerm, filterDepartment, filterStatus, selectedDate, calculateDuration]);
-
-  const determineStatus = useCallback((record) => {
-    if (!record.checkInTime || record.checkInTime === '--') return 'absent';
-    if (record.checkInTime && record.checkInTime !== '--') {
-      if (record.checkOutTime && record.checkOutTime !== '--') {
-        return 'completed';
-      } else {
-        return 'working';
-      }
-    }
-    return 'absent';
-  }, []);
-
-  const getStatusColor = useCallback((status) => {
-    switch (status) {
-      case 'working':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'completed':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'absent':
-        return 'bg-red-100 text-red-800 border-red-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  }, []);
-
-  const getStatusIcon = useCallback((status) => {
-    switch (status) {
-      case 'working':
-        return <Activity className="h-4 w-4 text-green-600" />;
-      case 'completed':
-        return <CheckCircle className="h-4 w-4 text-blue-600" />;
-      case 'absent':
-        return <XCircle className="h-4 w-4 text-red-600" />;
-      default:
-        return <Clock className="h-4 w-4 text-gray-600" />;
-    }
-  }, []);
-
-  const openDetailsDialog = useCallback((record) => {
-    setSelectedRecord(record);
-    setShowDetailsDialog(true);
-  }, []);
-
-  const formatDate = useCallback((dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  }, []);
-
-  // Filter data based on search and filter criteria
-  const filteredData = attendanceRecords.filter(record => {
-    const matchesSearch = 
-      (record.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (record.employeeId || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (record.department || '').toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesDepartment = filterDepartment === 'all' || record.department === filterDepartment;
-    
-    let matchesStatus = true;
-    if (filterStatus !== 'all') {
-      const status = determineStatus(record);
-      matchesStatus = status === filterStatus;
-    }
-    
-    return matchesSearch && matchesDepartment && matchesStatus;
-  });
-
+  // --- JSX ---
   return (
-    <div className="p-4 md:p-6 space-y-6 bg-gray-50 min-h-screen">
-      {/* Header */}
+    <div className="p-4 md:p-6 space-y-6 bg-gray-50 min-h-screen ml-64">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Attendance Management</h1>
             {isOnline ? (
               <Badge className="bg-green-100 text-green-800 border-green-200">
-                <Wifi className="h-3 w-3 mr-1" />
-                Online
+                <Wifi className="h-3 w-3 mr-1" /> Online
               </Badge>
             ) : (
               <Badge className="bg-red-100 text-red-800 border-red-200">
-                <WifiOff className="h-3 w-3 mr-1" />
-                Offline
+                <WifiOff className="h-3 w-3 mr-1" /> Offline
               </Badge>
             )}
           </div>
           <p className="text-gray-600 mt-1">Monitor real-time employee attendance records</p>
           <p className="text-sm text-gray-500">Viewing data for {formatDate(selectedDate)}</p>
         </div>
-        
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <Input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="w-full sm:w-[180px]"
-          />
-          <Button 
-            variant="outline" 
-            onClick={refreshData}
-            disabled={isLoading}
-            className="flex items-center gap-2"
-          >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            {isLoading ? 'Refreshing...' : 'Refresh'}
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={exportData} 
-            disabled={attendanceRecords.length === 0}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">Export Report</span>
-            <span className="sm:hidden">Export</span>
-          </Button>
-        </div>
       </div>
 
-      {/* Error Display */}
+      {/* Alerts */}
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>
             {error}
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="ml-2"
-              onClick={clearError}
-            >
-              Dismiss
-            </Button>
+            <Button variant="outline" size="sm" className="ml-2" onClick={clearError}>Dismiss</Button>
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Offline Warning */}
       {!isOnline && (
         <Alert className="border-orange-200 bg-orange-50">
           <WifiOff className="h-4 w-4 text-orange-600" />
@@ -377,8 +214,9 @@ const AdminAttendance = () => {
         </Alert>
       )}
 
-      {/* Daily Overview Stats */}
+      {/* Daily Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+        {/* Present */}
         <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
           <CardContent className="p-4 text-center">
             <UserCheck className="h-6 w-6 text-blue-500 mx-auto mb-2" />
@@ -386,7 +224,7 @@ const AdminAttendance = () => {
             <p className="text-xs text-blue-600">Present Today</p>
           </CardContent>
         </Card>
-
+        {/* Working */}
         <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
           <CardContent className="p-4 text-center">
             <Activity className="h-6 w-6 text-green-500 mx-auto mb-2" />
@@ -394,7 +232,7 @@ const AdminAttendance = () => {
             <p className="text-xs text-green-600">Working</p>
           </CardContent>
         </Card>
-
+        {/* Completed */}
         <Card className="bg-gradient-to-br from-gray-50 to-gray-100 border-gray-200">
           <CardContent className="p-4 text-center">
             <CheckCircle className="h-6 w-6 text-gray-500 mx-auto mb-2" />
@@ -402,7 +240,7 @@ const AdminAttendance = () => {
             <p className="text-xs text-gray-600">Completed</p>
           </CardContent>
         </Card>
-
+        {/* On Time */}
         <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
           <CardContent className="p-4 text-center">
             <TrendingUp className="h-6 w-6 text-purple-500 mx-auto mb-2" />
@@ -410,7 +248,7 @@ const AdminAttendance = () => {
             <p className="text-xs text-purple-600">On Time</p>
           </CardContent>
         </Card>
-
+        {/* Avg Time */}
         <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-200">
           <CardContent className="p-4 text-center">
             <Timer className="h-6 w-6 text-yellow-500 mx-auto mb-2" />
@@ -418,7 +256,7 @@ const AdminAttendance = () => {
             <p className="text-xs text-yellow-600">Avg Time</p>
           </CardContent>
         </Card>
-
+        {/* Completion */}
         <Card className="bg-gradient-to-br from-indigo-50 to-indigo-100 border-indigo-200">
           <CardContent className="p-4 text-center">
             <BarChart3 className="h-6 w-6 text-indigo-500 mx-auto mb-2" />
@@ -455,7 +293,7 @@ const AdminAttendance = () => {
                   ))}
                 </SelectContent>
               </Select>
-              
+
               <Select value={filterStatus} onValueChange={setFilterStatus}>
                 <SelectTrigger>
                   <SelectValue placeholder="All Status" />
@@ -508,7 +346,7 @@ const AdminAttendance = () => {
             filteredData.map((record) => {
               const status = determineStatus(record);
               const duration = calculateDuration(record.checkInTime, record.checkOutTime);
-              
+
               return (
                 <div key={record.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
                   {/* Mobile Layout */}
@@ -528,7 +366,7 @@ const AdminAttendance = () => {
                         {status.charAt(0).toUpperCase() + status.slice(1)}
                       </Badge>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-3 mb-3">
                       <div className="bg-green-50 p-2 rounded">
                         <p className="text-xs text-gray-500">Check In</p>
@@ -539,22 +377,22 @@ const AdminAttendance = () => {
                         <p className="font-semibold text-red-600">{record.checkOutTime || '--'}</p>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-sm">
                         <span className="font-medium">{record.department || 'N/A'}</span>
                         <span>•</span>
                         <span>{duration}</span>
                       </div>
-                      <Button 
-                        variant="ghost" 
+                      <Button
+                        variant="ghost"
                         size="sm"
                         onClick={() => openDetailsDialog(record)}
                       >
                         <Eye className="h-3 w-3" />
                       </Button>
                     </div>
-                    
+
                     <div className="flex items-center gap-1 text-xs text-gray-500 mt-2">
                       <MapPin className="h-3 w-3" />
                       {record.location || 'Unknown'}
@@ -576,7 +414,7 @@ const AdminAttendance = () => {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-6">
                       <div className="text-center">
                         <p className="text-sm text-gray-500">Check In</p>
@@ -595,8 +433,8 @@ const AdminAttendance = () => {
                           {getStatusIcon(status)}
                           {status.charAt(0).toUpperCase() + status.slice(1)}
                         </Badge>
-                        <Button 
-                          variant="ghost" 
+                        <Button
+                          variant="ghost"
                           size="sm"
                           onClick={() => openDetailsDialog(record)}
                         >
@@ -625,33 +463,33 @@ const AdminAttendance = () => {
           <CardTitle className="text-lg">Quick Actions</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <Button 
-            className="justify-start" 
-            variant="outline" 
+          <Button
+            className="justify-start"
+            variant="outline"
             disabled={attendanceRecords.length === 0}
             onClick={exportData}
           >
             <Download className="h-4 w-4 mr-2" />
             Export Report
           </Button>
-          <Button 
-            className="justify-start" 
+          <Button
+            className="justify-start"
             variant="outline"
             onClick={() => navigate('/dashboard/reports')}
           >
             <Calendar className="h-4 w-4 mr-2" />
             Historical Data
           </Button>
-          <Button 
-            className="justify-start" 
+          <Button
+            className="justify-start"
             variant="outline"
             onClick={() => navigate('/dashboard/employees')}
           >
             <Users className="h-4 w-4 mr-2" />
             Employee List
           </Button>
-          <Button 
-            className="justify-start" 
+          <Button
+            className="justify-start"
             variant="outline"
             onClick={() => navigate('/dashboard/settings')}
           >
@@ -682,7 +520,7 @@ const AdminAttendance = () => {
                   <p className="font-medium">{selectedRecord.department || 'N/A'}</p>
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-gray-500">Check In Time</p>
@@ -693,40 +531,24 @@ const AdminAttendance = () => {
                   <p className="font-medium text-red-600">{selectedRecord.checkOutTime || '--'}</p>
                 </div>
               </div>
-              
+
               <div>
                 <p className="text-sm text-gray-500">Total Duration</p>
                 <p className="font-medium">{calculateDuration(selectedRecord.checkInTime, selectedRecord.checkOutTime)}</p>
               </div>
-              
+
               <div>
                 <p className="text-sm text-gray-500">Location</p>
                 <p className="font-medium">{selectedRecord.location || 'Unknown'}</p>
               </div>
-              
+
               <div>
                 <p className="text-sm text-gray-500">Status</p>
-                <Badge className={getStatusColor(determineStatus(selectedRecord))}>
+                <Badge className={`${getStatusColor(determineStatus(selectedRecord))} flex items-center gap-1`}>
                   {getStatusIcon(determineStatus(selectedRecord))}
                   {determineStatus(selectedRecord).charAt(0).toUpperCase() + determineStatus(selectedRecord).slice(1)}
                 </Badge>
               </div>
-              
-              {selectedRecord.ipAddress && (
-                <div>
-                  <p className="text-sm text-gray-500">IP Address</p>
-                  <p className="font-medium text-xs">{selectedRecord.ipAddress}</p>
-                </div>
-              )}
-              
-              {selectedRecord.timestamp && (
-                <div>
-                  <p className="text-sm text-gray-500">Last Updated</p>
-                  <p className="font-medium text-xs">
-                    {new Date(selectedRecord.timestamp).toLocaleString()}
-                  </p>
-                </div>
-              )}
             </div>
           )}
         </DialogContent>
@@ -736,3 +558,11 @@ const AdminAttendance = () => {
 };
 
 export default AdminAttendance;
+
+
+
+
+
+
+
+

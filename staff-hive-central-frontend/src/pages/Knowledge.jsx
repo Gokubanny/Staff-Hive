@@ -99,7 +99,8 @@ const EnhancedKnowledge = () => {
       duration: '5:23',
       thumbnail: 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=400',
       views: 2150,
-      category: 'Getting Started'
+      category: 'Getting Started',
+      youtubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
     },
     {
       id: 2,
@@ -108,7 +109,8 @@ const EnhancedKnowledge = () => {
       duration: '3:45',
       thumbnail: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=400',
       views: 1420,
-      category: 'Getting Started'
+      category: 'Getting Started',
+      youtubeUrl: 'https://www.youtube.com/watch?v=V-_O7nl0Ii0'
     },
     {
       id: 3,
@@ -117,10 +119,10 @@ const EnhancedKnowledge = () => {
       duration: '7:12',
       thumbnail: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400',
       views: 890,
-      category: 'User Management'
+      category: 'User Management',
+      youtubeUrl: 'https://www.youtube.com/watch?v=3JZ_D3ELwOQ'
     }
   ];
-
   const faqs = [
     {
       id: 1,
@@ -289,37 +291,43 @@ const EnhancedKnowledge = () => {
             <CardDescription>Step-by-step video guides for common tasks</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {videoTutorials.map((video) => (
-              <div key={video.id} className="flex gap-4 p-4 border rounded-lg hover:shadow-md transition-shadow cursor-pointer group">
-                <div className="relative w-24 h-16 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
-                  <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center group-hover:bg-opacity-30 transition-colors">
-                    <Video className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="absolute bottom-1 right-1 bg-black bg-opacity-75 text-white text-xs px-1 rounded">
-                    {video.duration}
-                  </div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-medium mb-1 group-hover:text-blue-600 transition-colors">
-                    {video.title}
-                  </h3>
-                  <p className="text-sm text-gray-600 mb-2 line-clamp-2">{video.description}</p>
-                  <div className="flex items-center gap-4 text-xs text-gray-500">
-                    <Badge variant="outline" className="text-xs">{video.category}</Badge>
-                    <span className="flex items-center gap-1">
-                      <Eye className="h-3 w-3" />
-                      {video.views} views
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-            <Button variant="outline" className="w-full">
-              <Video className="h-4 w-4 mr-2" />
-              View All Tutorials
-            </Button>
-          </CardContent>
+  {videoTutorials.map((video) => (
+    <a
+      key={video.id}
+      href={video.youtubeUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex gap-4 p-4 border rounded-lg hover:shadow-md transition-shadow group"
+    >
+      <div className="relative w-24 h-16 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
+        <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center group-hover:bg-opacity-30 transition-colors">
+          <Video className="h-6 w-6 text-white" />
+        </div>
+        <div className="absolute bottom-1 right-1 bg-black bg-opacity-75 text-white text-xs px-1 rounded">
+          {video.duration}
+        </div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <h3 className="font-medium mb-1 group-hover:text-blue-600 transition-colors">
+          {video.title}
+        </h3>
+        <p className="text-sm text-gray-600 mb-2 line-clamp-2">{video.description}</p>
+        <div className="flex items-center gap-4 text-xs text-gray-500">
+          <Badge variant="outline" className="text-xs">{video.category}</Badge>
+          <span className="flex items-center gap-1">
+            <Eye className="h-3 w-3" />
+            {video.views} views
+          </span>
+        </div>
+      </div>
+    </a>
+  ))}
+  <Button variant="outline" className="w-full" onClick={() => window.open('https://www.youtube.com', '_blank')}>
+    <Video className="h-4 w-4 mr-2" />
+    View All Tutorials
+  </Button>
+</CardContent>
         </Card>
 
         {/* Quick Links */}

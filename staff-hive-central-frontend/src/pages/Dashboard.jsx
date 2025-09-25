@@ -1,112 +1,128 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { 
-  Users, Briefcase, Calendar, TrendingUp, TrendingDown, Plus, Eye, 
-  Clock, CheckCircle, XCircle, AlertTriangle, BarChart3, PieChart,
-  Activity, Target, Award, MessageSquare, Bell, Filter, Download,
-  UserCheck, Building, MapPin, DollarSign, Star
+import {
+  Users, Briefcase, Calendar, TrendingUp, Plus, Eye, Clock, CheckCircle, XCircle,
+  AlertTriangle, BarChart3, Activity, UserCheck, Building, Star
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import axios from 'axios';
+
+// Live Clock Component to avoid full dashboard re-render
+const LiveClock = () => {
+  const [time, setTime] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return <span className="font-medium">{time.toLocaleString()}</span>;
+};
 
 const AdminDashboard = () => {
   const [timeRange, setTimeRange] = useState('30d');
-  
-  // Mock data - in real app, this would come from your API/context
-  const dashboardData = {
-    totalJobs: 15,
-    activeJobs: 8,
-    totalApplications: 156,
-    newApplications: 12,
-    interviewsScheduled: 8,
-    hiredThisMonth: 4,
-    rejectedApplications: 23,
-    averageTimeToHire: 18, // days
-    topPerformingJobs: [
-      { title: 'Senior Frontend Developer', applications: 45, company: 'TechCorp' },
-      { title: 'UX Designer', applications: 32, company: 'DesignStudio' },
-      { title: 'Backend Developer', applications: 28, company: 'CloudTech' }
-    ],
-    recentApplications: [
-      {
-        id: 1,
-        applicantName: 'Alex Johnson',
-        position: 'Senior Frontend Developer',
-        appliedDate: '2024-05-20',
-        status: 'interview',
-        rating: 4.5
-      },
-      {
-        id: 2,
-        applicantName: 'Sarah Chen',
-        position: 'UX Designer',
-        appliedDate: '2024-05-19',
-        status: 'review',
-        rating: 4.8
-      },
-      {
-        id: 3,
-        applicantName: 'Michael Rodriguez',
-        position: 'Backend Developer',
-        appliedDate: '2024-05-18',
-        status: 'hired',
-        rating: 5.0
+
+  const [dashboardData, setDashboardData] = useState({
+    totalJobs: 0,
+    activeJobs: 0,
+    totalApplications: 0,
+    newApplications: 0,
+    interviewsScheduled: 0,
+    hiredThisMonth: 0,
+    rejectedApplications: 0,
+    averageTimeToHire: 0,
+    topPerformingJobs: [],
+    recentApplications: [],
+    upcomingInterviews: [],
+    departmentStats: []
+  });
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const [jobsRes, appsRes, interviewsRes, employeesRes] = await Promise.all([
+          axios.get('/api/jobs'),
+          axios.get('/api/applications'),
+          axios.get('/api/interviews'),
+          axios.get('/api/employees')
+        ]);
+
+        // Ensure we are working with arrays
+        const jobs = Array.isArray(jobsRes.data) ? jobsRes.data : jobsRes.data.jobs || [];
+        const applications = Array.isArray(appsRes.data) ? appsRes.data : appsRes.data.applications || [];
+        const interviews = Array.isArray(interviewsRes.data) ? interviewsRes.data : interviewsRes.data.interviews || [];
+        const employees = Array.isArray(employeesRes.data) ? employeesRes.data : employeesRes.data.employees || [];
+
+        const activeJobs = jobs.filter(job => job.isActive).length;
+        const totalJobs = jobs.length;
+
+        const today = new Date();
+        const newApplications = applications.filter(app => {
+          const appliedDate = new Date(app.appliedDate);
+          return appliedDate >= new Date(today.setDate(today.getDate() - 7));
+        }).length;
+
+        const interviewsScheduled = interviews.length;
+
+        const now = new Date();
+        const hiredThisMonth = employees.filter(emp => {
+          const hireDate = new Date(emp.hireDate);
+          return hireDate.getMonth() === now.getMonth() && hireDate.getFullYear() === now.getFullYear();
+        }).length;
+
+        const departments = ['Engineering', 'Design', 'Product'];
+        const departmentStats = departments.map(dept => {
+          const deptJobs = jobs.filter(job => job.department === dept);
+          const deptApplications = applications.filter(app => deptJobs.find(j => j.id === app.jobId));
+          const deptHires = employees.filter(emp => deptJobs.find(j => j.id === emp.jobId));
+          return {
+            name: dept,
+            openPositions: deptJobs.filter(j => j.isActive).length,
+            applications: deptApplications.length,
+            hires: deptHires.length
+          };
+        });
+
+        setDashboardData({
+          totalJobs,
+          activeJobs,
+          totalApplications: applications.length,
+          newApplications,
+          interviewsScheduled,
+          hiredThisMonth,
+          rejectedApplications: applications.filter(app => app.status === 'rejected').length,
+          averageTimeToHire: Math.round(employees.reduce((sum, emp) => sum + (emp.daysToHire || 0), 0) / (employees.length || 1)),
+          topPerformingJobs: jobs.sort((a, b) => (b.applications?.length || 0) - (a.applications?.length || 0)).slice(0, 3),
+          recentApplications: applications.slice(-5).reverse(),
+          upcomingInterviews: interviews.slice(0, 5),
+          departmentStats
+        });
+      } catch (error) {
+        console.error('Failed to fetch dashboard data:', error);
       }
-    ],
-    upcomingInterviews: [
-      {
-        id: 1,
-        applicantName: 'Alex Johnson',
-        position: 'Senior Frontend Developer',
-        date: '2024-05-21',
-        time: '2:00 PM',
-        type: 'Technical'
-      },
-      {
-        id: 2,
-        applicantName: 'Emma Wilson',
-        position: 'Product Manager',
-        date: '2024-05-21',
-        time: '4:00 PM',
-        type: 'Cultural Fit'
-      }
-    ],
-    departmentStats: [
-      { name: 'Engineering', openPositions: 5, applications: 89, hires: 2 },
-      { name: 'Design', openPositions: 2, applications: 34, hires: 1 },
-      { name: 'Product', openPositions: 1, applications: 23, hires: 1 }
-    ]
-  };
+    };
+
+    fetchDashboardData();
+  }, []);
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'hired':
-        return 'bg-green-100 text-green-800';
-      case 'rejected':
-        return 'bg-red-100 text-red-800';
-      case 'interview':
-        return 'bg-blue-100 text-blue-800';
-      case 'review':
-        return 'bg-yellow-100 text-yellow-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+      case 'hired': return 'bg-green-100 text-green-800';
+      case 'rejected': return 'bg-red-100 text-red-800';
+      case 'interview': return 'bg-blue-100 text-blue-800';
+      case 'review': return 'bg-yellow-100 text-yellow-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'hired':
-        return <CheckCircle className="h-4 w-4" />;
-      case 'rejected':
-        return <XCircle className="h-4 w-4" />;
-      case 'interview':
-        return <Calendar className="h-4 w-4" />;
-      case 'review':
-        return <Clock className="h-4 w-4" />;
-      default:
-        return <AlertTriangle className="h-4 w-4" />;
+      case 'hired': return <CheckCircle className="h-4 w-4" />;
+      case 'rejected': return <XCircle className="h-4 w-4" />;
+      case 'interview': return <Calendar className="h-4 w-4" />;
+      case 'review': return <Clock className="h-4 w-4" />;
+      default: return <AlertTriangle className="h-4 w-4" />;
     }
   };
 
@@ -117,21 +133,14 @@ const AdminDashboard = () => {
     </Badge>
   );
 
-  const RatingStars = ({ rating }) => {
-    return (
-      <div className="flex items-center gap-1">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <Star
-            key={star}
-            className={`h-3 w-3 ${
-              star <= rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'
-            }`}
-          />
-        ))}
-        <span className="text-xs text-gray-600 ml-1">({rating})</span>
-      </div>
-    );
-  };
+  const RatingStars = ({ rating }) => (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map(star => (
+        <Star key={star} className={`h-3 w-3 ${star <= rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />
+      ))}
+      <span className="text-xs text-gray-600 ml-1">({rating})</span>
+    </div>
+  );
 
   return (
     <div className="p-6 ml-64 space-y-6 bg-gray-50 min-h-screen">
@@ -139,7 +148,9 @@ const AdminDashboard = () => {
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">HR Dashboard</h1>
-          <p className="text-gray-600 mt-1">Overview of your recruitment and HR activities</p>
+          <p className="text-gray-600 mt-1">
+            Overview of your recruitment and HR activities | <LiveClock />
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <Select value={timeRange} onValueChange={setTimeRange}>
@@ -162,6 +173,7 @@ const AdminDashboard = () => {
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Active Jobs Card */}
         <Card className="bg-gradient-to-r from-blue-50 to-blue-100 border-blue-200">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -177,6 +189,7 @@ const AdminDashboard = () => {
           </CardContent>
         </Card>
 
+        {/* Total Applications Card */}
         <Card className="bg-gradient-to-r from-green-50 to-green-100 border-green-200">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -195,6 +208,7 @@ const AdminDashboard = () => {
           </CardContent>
         </Card>
 
+        {/* Interviews Card */}
         <Card className="bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -210,6 +224,7 @@ const AdminDashboard = () => {
           </CardContent>
         </Card>
 
+        {/* Hired This Month Card */}
         <Card className="bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -412,3 +427,4 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
+

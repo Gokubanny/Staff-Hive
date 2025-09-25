@@ -19,7 +19,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { 
   DollarSign, 
@@ -28,49 +27,55 @@ import {
   Download,
   Search,
   Play,
-  CheckCircle,
-  Clock,
   Users,
-  TrendingUp,
-  Eye,
+  CheckCircle,
   Plus
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
+import axios from "axios"
 
 export default function Payroll() {
-  const { employees, payroll, fetchEmployees, fetchPayroll, loading } = useData()
+  const { employees, loading: dataLoading } = useData()
   const { toast } = useToast()
   const navigate = useNavigate()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedEmployee, setSelectedEmployee] = useState(null)
   const [isPayslipDialogOpen, setIsPayslipDialogOpen] = useState(false)
+  const [payrollRecords, setPayrollRecords] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const currentPeriod = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
 
   useEffect(() => {
-    fetchEmployees();
-    fetchPayroll();
-  }, []);
+    fetchPayroll()
+  }, [])
 
-  const filteredEmployees = employees.filter(employee =>
-    employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    employee.position.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const fetchPayroll = async () => {
+    try {
+      setLoading(true)
+      const res = await axios.get(`/api/payroll?period=${currentPeriod}`)
+      if (res.data.success) {
+        setPayrollRecords(res.data.data)
+      } else {
+        toast({ title: "Error", description: "Failed to fetch payroll" })
+      }
+    } catch (error) {
+      console.error(error)
+      toast({ title: "Error", description: "Could not fetch payroll records" })
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  const filteredPayroll = payroll.filter(record =>
+  const filteredPayroll = payrollRecords.filter(record =>
     record.employeeName.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const getInitials = (name) => {
-    return name.split(" ").map(n => n[0]).join("").toUpperCase()
-  }
+  const getInitials = (name) => name.split(" ").map(n => n[0]).join("").toUpperCase()
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-NG', {
-      style: 'currency',
-      currency: 'NGN',
-      minimumFractionDigits: 0
-    }).format(amount)
-  }
+  const formatCurrency = (amount) =>
+    new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', minimumFractionDigits: 0 }).format(amount)
 
   const getStatusColor = (status) => {
     switch(status) {
@@ -82,35 +87,14 @@ export default function Payroll() {
     }
   }
 
-  const totalNetPay = filteredEmployees.reduce((sum, emp) => sum + (emp.salary || 0), 0)
-  const totalPayrollAmount = payroll.reduce((sum, record) => sum + (record.totalAmount || 0), 0)
-
-  const calculatePayslipDetails = (employee) => {
-    const baseSalary = employee.salary || 0
-    const overtime = 0
-    const bonuses = baseSalary * 0.1 // 10% bonus
-    const taxDeduction = baseSalary * 0.075 // 7.5% tax
-    const pensionDeduction = baseSalary * 0.08 // 8% pension
-    const totalDeductions = taxDeduction + pensionDeduction
-    const netPay = baseSalary + overtime + bonuses - totalDeductions
-
-    return {
-      baseSalary,
-      overtime,
-      bonuses,
-      taxDeduction,
-      pensionDeduction,
-      totalDeductions,
-      netPay
-    }
-  }
-
-  const handleViewPayslip = (employee) => {
-    setSelectedEmployee(employee)
+  const handleViewPayslip = (record) => {
+    setSelectedEmployee(record)
     setIsPayslipDialogOpen(true)
   }
 
-  if (loading) {
+  const totalPayrollAmount = payrollRecords.reduce((sum, record) => sum + (record.totalAmount || 0), 0)
+
+  if (loading || dataLoading) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
 
@@ -165,7 +149,7 @@ export default function Payroll() {
               <FileText className="h-8 w-8 text-purple-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Records</p>
-                <p className="text-2xl font-bold text-foreground">{payroll.length}</p>
+                <p className="text-2xl font-bold text-foreground">{payrollRecords.length}</p>
               </div>
             </div>
           </CardContent>
@@ -186,181 +170,85 @@ export default function Payroll() {
         </Card>
       </div>
 
-      {/* Payroll Tabs */}
-      <Tabs defaultValue="current" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="current">Current Payroll</TabsTrigger>
-          <TabsTrigger value="history">Payroll History</TabsTrigger>
-        </TabsList>
+      {/* Payroll Table */}
+      <Card className="shadow-card border-0">
+        <CardHeader>
+          <CardTitle>Current Month Payroll</CardTitle>
+          <CardDescription>
+            Review and manage employee salaries for the current period
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search employees..."
+                className="pl-10"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <Button variant="outline" size="default" className="flex">
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+          </div>
 
-        <TabsContent value="current">
-          <Card className="shadow-card border-0">
-            <CardHeader>
-              <CardTitle>Current Month Payroll</CardTitle>
-              <CardDescription>
-                Review and manage employee salaries for the current period
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search employees..."
-                    className="pl-10"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-                <Button variant="outline" size="default" className="flex">
-                  <Download className="h-4 w-4 mr-2" />
-                  Export
-                </Button>
-              </div>
-
-              {employees.length === 0 ? (
-                <div className="text-center py-8">
-                  <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No employees found</h3>
-                  <p className="text-gray-600 mb-4">Add employees first to manage payroll</p>
-                  <Button onClick={() => navigate('/dashboard/employees')}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Employees
-                  </Button>
-                </div>
-              ) : (
-                <div className="rounded-md border border-border overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead className="w-[250px] text-muted-foreground font-medium">Employee</TableHead>
-                        <TableHead className="w-[150px] text-muted-foreground font-medium">Base Salary</TableHead>
-                        <TableHead className="w-[150px] text-muted-foreground font-medium">Allowances</TableHead>
-                        <TableHead className="w-[150px] text-muted-foreground font-medium">Deductions</TableHead>
-                        <TableHead className="w-[150px] text-muted-foreground font-medium">Net Pay</TableHead>
-                        <TableHead className="w-[120px] text-muted-foreground font-medium text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredEmployees.map((employee) => {
-                        const details = calculatePayslipDetails(employee)
-                        const initials = getInitials(employee.name)
-                        
-                        return (
-                          <TableRow key={employee._id} className="hover:bg-muted/30 transition-colors">
-                            <TableCell className="w-[250px]">
-                              <div className="flex items-center space-x-3">
-                                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                                  <span className="text-blue-600 font-medium text-sm">{initials}</span>
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="font-medium text-foreground">{employee.name}</div>
-                                  <div className="text-sm text-muted-foreground">{employee.position}</div>
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="w-[150px]">
-                              <div className="font-medium">{formatCurrency(details.baseSalary)}</div>
-                            </TableCell>
-                            <TableCell className="w-[150px]">
-                              <div className="font-medium text-green-600">+{formatCurrency(details.bonuses)}</div>
-                            </TableCell>
-                            <TableCell className="w-[150px]">
-                              <div className="font-medium text-red-600">-{formatCurrency(details.totalDeductions)}</div>
-                            </TableCell>
-                            <TableCell className="w-[150px]">
-                              <div className="font-bold text-lg">{formatCurrency(details.netPay)}</div>
-                            </TableCell>
-                            <TableCell className="w-[120px] text-right">
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={() => navigate(`/dashboard/payslip/${employee._id}`)}
-                                className="flex items-center gap-2"
-                              >
-                                <FileText className="h-4 w-4" />
-                                Payslip
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="history">
-          <Card className="shadow-card border-0">
-            <CardHeader>
-              <CardTitle>Payroll History</CardTitle>
-              <CardDescription>
-                View previous payroll runs and download reports
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {payroll.length === 0 ? (
-                <div className="text-center py-8">
-                  <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No payroll history</h3>
-                  <p className="text-gray-600 mb-4">Generate your first payroll to see history here</p>
-                  <Button onClick={() => navigate('/dashboard/generate-payroll')}>
-                    <Play className="h-4 w-4 mr-2" />
-                    Generate Payroll
-                  </Button>
-                </div>
-              ) : (
-                <div className="rounded-md border border-border overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead className="w-[200px]">Employee</TableHead>
-                        <TableHead className="w-[150px]">Period</TableHead>
-                        <TableHead className="w-[120px] text-right">Total Amount</TableHead>
-                        <TableHead className="w-[100px]">Status</TableHead>
-                        <TableHead className="w-[100px] text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredPayroll.map((record) => (
-                        <TableRow key={record._id} className="hover:bg-muted/30 transition-colors">
-                          <TableCell className="w-[200px]">
-                            <div className="font-medium truncate">{record.employeeName}</div>
-                          </TableCell>
-                          <TableCell className="w-[150px]">
-                            <div className="flex items-center">
-                              <Calendar className="h-4 w-4 mr-2 text-muted-foreground flex-shrink-0" />
-                              <span className="truncate">{record.period}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="w-[120px] text-right">
-                            <div className="font-medium">{formatCurrency(record.totalAmount)}</div>
-                          </TableCell>
-                          <TableCell className="w-[100px]">
-                            <Badge className={getStatusColor(record.status)}>
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              {record.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="w-[100px] text-right">
-                            <Button variant="outline" size="sm">
-                              <Download className="h-4 w-4 mr-2" />
-                              Export
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+          {payrollRecords.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No payroll records found</h3>
+              <p className="text-gray-600 mb-4">Generate payroll to see records here</p>
+              <Button onClick={() => navigate('/dashboard/generate-payroll')}>
+                <Play className="h-4 w-4 mr-2" />
+                Generate Payroll
+              </Button>
+            </div>
+          ) : (
+            <div className="rounded-md border border-border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Base Salary</TableHead>
+                    <TableHead>Bonuses</TableHead>
+                    <TableHead>Deductions</TableHead>
+                    <TableHead>Net Pay</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredPayroll.map(record => (
+                    <TableRow key={record._id} className="hover:bg-muted/30 transition-colors">
+                      <TableCell>
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                            <span className="text-blue-600 font-medium text-sm">{getInitials(record.employeeName)}</span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium text-foreground">{record.employeeName}</div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>{formatCurrency(record.baseSalary)}</TableCell>
+                      <TableCell className="text-green-600">{formatCurrency(record.bonuses)}</TableCell>
+                      <TableCell className="text-red-600">{formatCurrency(record.deductions.tax + record.deductions.pension + record.deductions.other)}</TableCell>
+                      <TableCell className="font-bold">{formatCurrency(record.totalAmount)}</TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="outline" size="sm" onClick={() => handleViewPayslip(record)}>
+                          <FileText className="h-4 w-4" />
+                          Payslip
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Payslip Dialog */}
       <Dialog open={isPayslipDialogOpen} onOpenChange={setIsPayslipDialogOpen}>
@@ -374,64 +262,38 @@ export default function Payroll() {
               <div className="flex items-center space-x-4 p-4 bg-muted/50 rounded-lg">
                 <Avatar className="h-16 w-16">
                   <AvatarImage src={selectedEmployee.avatar || ""} />
-                  <AvatarFallback className="bg-primary/10 text-primary font-medium text-lg">
-                    {getInitials(selectedEmployee.name)}
-                  </AvatarFallback>
+                  <AvatarFallback className="bg-primary/10 text-primary font-bold">{getInitials(selectedEmployee.employeeName)}</AvatarFallback>
                 </Avatar>
                 <div>
-                  <h3 className="text-lg font-semibold">{selectedEmployee.name}</h3>
+                  <h3 className="font-bold text-lg">{selectedEmployee.employeeName}</h3>
                   <p className="text-muted-foreground">{selectedEmployee.position}</p>
-                  <p className="text-sm text-muted-foreground">{selectedEmployee.department}</p>
                 </div>
               </div>
 
-              {/* Payslip Details */}
-              <div className="space-y-4">
-                <h4 className="font-semibold text-lg">Payment Details</h4>
-                
-                {(() => {
-                  const details = calculatePayslipDetails(selectedEmployee)
-                  return (
-                    <div className="space-y-3">
-                      <div className="flex justify-between py-2 border-b">
-                        <span>Base Salary</span>
-                        <span className="font-medium">{formatCurrency(details.baseSalary)}</span>
-                      </div>
-                      <div className="flex justify-between py-2 border-b">
-                        <span>Overtime</span>
-                        <span className="font-medium">{formatCurrency(details.overtime)}</span>
-                      </div>
-                      <div className="flex justify-between py-2 border-b">
-                        <span>Bonuses</span>
-                        <span className="font-medium text-green-600">{formatCurrency(details.bonuses)}</span>
-                      </div>
-                      <div className="flex justify-between py-2 border-b">
-                        <span>Tax Deduction (7.5%)</span>
-                        <span className="font-medium text-red-600">-{formatCurrency(details.taxDeduction)}</span>
-                      </div>
-                      <div className="flex justify-between py-2 border-b">
-                        <span>Pension Deduction (8%)</span>
-                        <span className="font-medium text-red-600">-{formatCurrency(details.pensionDeduction)}</span>
-                      </div>
-                      <div className="flex justify-between py-3 border-t-2 border-primary/20 bg-primary/5 px-4 rounded-lg">
-                        <span className="font-semibold text-lg">Net Pay</span>
-                        <span className="font-bold text-lg text-primary">{formatCurrency(details.netPay)}</span>
-                      </div>
-                    </div>
-                  )
-                })()}
+              {/* Salary Breakdown */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 border rounded-lg">
+                  <p className="text-muted-foreground">Base Salary</p>
+                  <p className="font-bold text-lg">{formatCurrency(selectedEmployee.baseSalary)}</p>
+                </div>
+                <div className="p-4 border rounded-lg">
+                  <p className="text-muted-foreground">Bonuses</p>
+                  <p className="font-bold text-lg text-green-600">{formatCurrency(selectedEmployee.bonuses)}</p>
+                </div>
+                <div className="p-4 border rounded-lg">
+                  <p className="text-muted-foreground">Deductions</p>
+                  <p className="font-bold text-lg text-red-600">{formatCurrency(selectedEmployee.deductions.tax + selectedEmployee.deductions.pension + selectedEmployee.deductions.other)}</p>
+                </div>
+                <div className="p-4 border rounded-lg">
+                  <p className="text-muted-foreground">Net Pay</p>
+                  <p className="font-bold text-lg">{formatCurrency(selectedEmployee.totalAmount)}</p>
+                </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex justify-end space-x-2 pt-4">
-                <Button variant="outline" onClick={() => setIsPayslipDialogOpen(false)}>
-                  Close
-                </Button>
-                <Button>
-                  <Download className="h-4 w-4 mr-2" />
-                  Download PDF
-                </Button>
-              </div>
+              <Button className="w-full mt-4">
+                <Download className="h-4 w-4 mr-2" />
+                Download PDF
+              </Button>
             </div>
           )}
         </DialogContent>

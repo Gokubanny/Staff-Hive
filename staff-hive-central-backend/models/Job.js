@@ -1,4 +1,4 @@
-// models/Job.js
+// models/Job.js - Job postings model
 const mongoose = require('mongoose');
 
 const jobSchema = new mongoose.Schema({
@@ -7,13 +7,24 @@ const jobSchema = new mongoose.Schema({
     required: [true, 'Job title is required'],
     trim: true,
     minlength: [2, 'Job title must be at least 2 characters'],
-    maxlength: [200, 'Job title cannot exceed 200 characters']
+    maxlength: [100, 'Job title cannot exceed 100 characters']
   },
-  company: {
+  description: {
     type: String,
-    required: [true, 'Company name is required'],
-    trim: true
+    required: [true, 'Job description is required'],
+    trim: true,
+    minlength: [50, 'Job description must be at least 50 characters']
   },
+  requirements: [{
+    type: String,
+    required: true,
+    trim: true
+  }],
+  responsibilities: [{
+    type: String,
+    required: true,
+    trim: true
+  }],
   department: {
     type: String,
     required: [true, 'Department is required'],
@@ -24,57 +35,52 @@ const jobSchema = new mongoose.Schema({
     required: [true, 'Location is required'],
     trim: true
   },
-  type: {
+  employmentType: {
     type: String,
-    required: [true, 'Job type is required'],
-    enum: ['full-time', 'part-time', 'contract', 'internship']
+    enum: ['Full-time', 'Part-time', 'Contract', 'Intern'],
+    required: true
   },
-  description: {
-    type: String,
-    required: [true, 'Job description is required'],
-    trim: true,
-    minlength: [10, 'Description must be at least 10 characters'],
-    maxlength: [5000, 'Description cannot exceed 5000 characters']
+  salaryRange: {
+    min: {
+      type: Number,
+      required: true,
+      min: [0, 'Minimum salary cannot be negative']
+    },
+    max: {
+      type: Number,
+      required: true,
+      min: [0, 'Maximum salary cannot be negative']
+    }
   },
   experienceLevel: {
     type: String,
-    required: [true, 'Experience level is required'],
-    enum: ['entry', 'junior', 'mid', 'senior', 'lead', 'executive']
+    enum: ['Entry Level', 'Mid Level', 'Senior Level', 'Executive'],
+    required: true
   },
-  salary: {
-    type: Number,
-    min: [0, 'Salary must be positive']
-  },
-  requirements: [{
-    type: String,
-    trim: true
-  }],
-  benefits: [{
-    type: String,
-    trim: true
-  }],
   status: {
     type: String,
-    enum: ['active', 'paused', 'closed'],
-    default: 'active'
+    enum: ['Draft', 'Published', 'Closed', 'On Hold'],
+    default: 'Draft'
   },
-  postedDate: {
+  applicationDeadline: {
     type: Date,
-    default: Date.now
+    required: true
   },
-  closingDate: {
-    type: Date
-  },
+  
+  // References
   companyId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Company'
+    ref: 'Company',
+    required: true
   },
-  userId: {
+  createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
-  applicationsCount: {
+  
+  // Statistics
+  applicationCount: {
     type: Number,
     default: 0
   }
@@ -82,8 +88,9 @@ const jobSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index for better search performance
-jobSchema.index({ userId: 1, status: 1 });
-jobSchema.index({ userId: 1, title: 'text', company: 'text', department: 'text' });
+// Create indexes
+jobSchema.index({ companyId: 1 });
+jobSchema.index({ status: 1 });
+jobSchema.index({ applicationDeadline: 1 });
 
 module.exports = mongoose.model('Job', jobSchema);

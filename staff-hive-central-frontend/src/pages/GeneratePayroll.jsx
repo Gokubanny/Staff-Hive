@@ -21,6 +21,7 @@ import {
   Play,
   CheckCircle,
   Users,
+  Plus,
   FileText
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"

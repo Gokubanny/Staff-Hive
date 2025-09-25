@@ -1,137 +1,80 @@
+// user/UserDashboard.jsx
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { useAuth } from '@/contexts/AuthContext'; // adjust path if needed
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { 
-  Briefcase, 
-  Clock, 
-  MapPin, 
-  DollarSign, 
-  TrendingUp, 
-  Calendar,
-  CheckCircle,
-  AlertCircle,
-  User,
-  Bell,
-  BookOpen,
-  Award,
-  Target,
-  Activity
+import {
+  Briefcase, Clock, MapPin, DollarSign, TrendingUp, Calendar,
+  CheckCircle, AlertCircle, User, Bell, BookOpen, Award, Target, Activity
 } from 'lucide-react';
 
 const UserDashboard = () => {
-  const [user] = useState({
-    name: "John Doe",
-    email: "john.doe@example.com",
-    department: "Engineering",
-    position: "Frontend Developer",
-    joinDate: "2024-01-15",
-    profileCompletion: 85
-  });
+  const { token } = useAuth();
+  const [user, setUser] = useState(null);
+  const [applications, setApplications] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const [applications] = useState([
-    {
-      id: 1,
-      jobTitle: "Senior Frontend Developer",
-      company: "TechCorp Inc.",
-      appliedDate: "2024-05-15",
-      status: "interview",
-      location: "San Francisco, CA",
-      salary: "$120,000"
-    },
-    {
-      id: 2,
-      jobTitle: "React Developer",
-      company: "StartupXYZ",
-      appliedDate: "2024-05-12",
-      status: "review",
-      location: "Remote",
-      salary: "$95,000"
-    },
-    {
-      id: 3,
-      jobTitle: "Full Stack Engineer",
-      company: "InnovateLabs",
-      appliedDate: "2024-05-10",
-      status: "rejected",
-      location: "New York, NY",
-      salary: "$110,000"
-    }
-  ]);
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const config = { headers: { Authorization: `Bearer ${token}` } };
 
-  const [notifications] = useState([
-    {
-      id: 1,
-      title: "Interview Scheduled",
-      message: "Your interview for Senior Frontend Developer is scheduled for tomorrow at 2 PM",
-      type: "interview",
-      time: "2 hours ago"
-    },
-    {
-      id: 2,
-      title: "Application Update",
-      message: "Your application for React Developer position is now under review",
-      type: "update",
-      time: "1 day ago"
-    },
-    {
-      id: 3,
-      title: "New Training Available",
-      message: "Advanced React Patterns course is now available",
-      type: "training",
-      time: "2 days ago"
-    }
-  ]);
+        const [userRes, appsRes, notifRes, eventsRes] = await Promise.all([
+          axios.get('http://localhost:5000/api/auth/user', config),
+          axios.get('http://localhost:5000/api/applicants', config),
+          axios.get('http://localhost:5000/api/notifications', config),
+          axios.get('http://localhost:5000/api/events', config)
+        ]);
 
-  const [upcomingEvents] = useState([
-    {
-      id: 1,
-      title: "Technical Interview",
-      company: "TechCorp Inc.",
-      date: "2024-05-20",
-      time: "2:00 PM",
-      type: "interview"
-    },
-    {
-      id: 2,
-      title: "Company Culture Session",
-      company: "StartupXYZ",
-      date: "2024-05-22",
-      time: "10:00 AM",
-      type: "meeting"
-    }
-  ]);
+        setUser(userRes.data?.user || null);
+        setApplications(appsRes.data?.data || appsRes.data || []);
+        setNotifications(notifRes.data?.data || notifRes.data || []);
+        setUpcomingEvents(eventsRes.data?.data || eventsRes.data || []);
+        
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [token]);
+
+  if (loading) return <div className="p-6">Loading...</div>;
+  if (!user) return <div className="p-6 text-red-500">Failed to load user data</div>;
 
   const getStatusColor = (status) => {
-    switch (status) {
-      case 'interview':
-        return 'bg-blue-100 text-blue-800';
-      case 'review':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'rejected':
-        return 'bg-red-100 text-red-800';
-      case 'hired':
-        return 'bg-green-100 text-green-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+    switch (status.toLowerCase()) {
+      case 'interview': return 'bg-blue-100 text-blue-800';
+      case 'review': return 'bg-yellow-100 text-yellow-800';
+      case 'rejected': return 'bg-red-100 text-red-800';
+      case 'hired': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   const getStatusIcon = (status) => {
-    switch (status) {
-      case 'interview':
-        return <Calendar className="h-4 w-4" />;
-      case 'review':
-        return <Clock className="h-4 w-4" />;
-      case 'rejected':
-        return <AlertCircle className="h-4 w-4" />;
-      case 'hired':
-        return <CheckCircle className="h-4 w-4" />;
-      default:
-        return <Clock className="h-4 w-4" />;
+    switch (status.toLowerCase()) {
+      case 'interview': return <Calendar className="h-4 w-4" />;
+      case 'review': return <Clock className="h-4 w-4" />;
+      case 'rejected': return <AlertCircle className="h-4 w-4" />;
+      case 'hired': return <CheckCircle className="h-4 w-4" />;
+      default: return <Clock className="h-4 w-4" />;
     }
   };
+
+  // Compute Success Rate dynamically
+  const totalApplications = applications.length;
+  const successfulApplications = applications.filter(app => app.status.toLowerCase() === 'hired').length;
+  const successRate = totalApplications > 0
+    ? Math.round((successfulApplications / totalApplications) * 100)
+    : 0;
 
   return (
     <div className="p-6 space-y-6 bg-gray-50 min-h-screen">
@@ -145,8 +88,8 @@ const UserDashboard = () => {
           <div className="text-right">
             <p className="text-sm text-blue-100">Profile Completion</p>
             <div className="flex items-center gap-2 mt-1">
-              <Progress value={user.profileCompletion} className="w-24 h-2" />
-              <span className="text-sm font-semibold">{user.profileCompletion}%</span>
+              <Progress value={user.profileCompletion || 0} className="w-24 h-2" />
+              <span className="text-sm font-semibold">{user.profileCompletion || 0}%</span>
             </div>
           </div>
         </div>
@@ -155,61 +98,56 @@ const UserDashboard = () => {
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-blue-600">Total Applications</p>
-                <p className="text-3xl font-bold text-blue-800">{applications.length}</p>
-              </div>
-              <div className="h-12 w-12 bg-blue-500 rounded-lg flex items-center justify-center">
-                <Briefcase className="h-6 w-6 text-white" />
-              </div>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-blue-600">Total Applications</p>
+              <p className="text-3xl font-bold text-blue-800">{totalApplications}</p>
+            </div>
+            <div className="h-12 w-12 bg-blue-500 rounded-lg flex items-center justify-center">
+              <Briefcase className="h-6 w-6 text-white" />
             </div>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-green-600">In Progress</p>
-                <p className="text-3xl font-bold text-green-800">
-                  {applications.filter(app => app.status === 'interview' || app.status === 'review').length}
-                </p>
-              </div>
-              <div className="h-12 w-12 bg-green-500 rounded-lg flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-white" />
-              </div>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-green-600">In Progress</p>
+              <p className="text-3xl font-bold text-green-800">
+                {applications.filter(app => ['interview', 'review'].includes(app.status.toLowerCase())).length}
+              </p>
+            </div>
+            <div className="h-12 w-12 bg-green-500 rounded-lg flex items-center justify-center">
+              <TrendingUp className="h-6 w-6 text-white" />
             </div>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-purple-600">Interviews</p>
-                <p className="text-3xl font-bold text-purple-800">
-                  {applications.filter(app => app.status === 'interview').length}
-                </p>
-              </div>
-              <div className="h-12 w-12 bg-purple-500 rounded-lg flex items-center justify-center">
-                <Calendar className="h-6 w-6 text-white" />
-              </div>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-purple-600">Interviews</p>
+              <p className="text-3xl font-bold text-purple-800">
+                {applications.filter(app => app.status.toLowerCase() === 'interview').length}
+              </p>
+            </div>
+            <div className="h-12 w-12 bg-purple-500 rounded-lg flex items-center justify-center">
+              <Calendar className="h-6 w-6 text-white" />
             </div>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-orange-600">Success Rate</p>
-                <p className="text-3xl font-bold text-orange-800">75%</p>
-              </div>
-              <div className="h-12 w-12 bg-orange-500 rounded-lg flex items-center justify-center">
-                <Target className="h-6 w-6 text-white" />
-              </div>
+          <CardContent 
+            className="p-6 flex items-center justify-between"
+            title={`${successfulApplications} out of ${totalApplications} applications were successful`}
+          >
+            <div>
+              <p className="text-sm font-medium text-orange-600">Success Rate</p>
+              <p className="text-3xl font-bold text-orange-800">{successRate}%</p>
+            </div>
+            <div className="h-12 w-12 bg-orange-500 rounded-lg flex items-center justify-center">
+              <Target className="h-6 w-6 text-white" />
             </div>
           </CardContent>
         </Card>
@@ -227,40 +165,30 @@ const UserDashboard = () => {
               <CardDescription>Track the status of your recent job applications</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {applications.map((application) => (
-                <div key={application.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+              {applications.map((app) => (
+                <div key={app._id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
                   <div className="flex items-center space-x-4">
-                    <div className={`p-2 rounded-full ${getStatusColor(application.status)}`}>
-                      {getStatusIcon(application.status)}
+                    <div className={`p-2 rounded-full ${getStatusColor(app.status)}`}>
+                      {getStatusIcon(app.status)}
                     </div>
                     <div>
-                      <h4 className="font-semibold text-gray-900">{application.jobTitle}</h4>
-                      <p className="text-sm text-gray-600">{application.company}</p>
+                      <h4 className="font-semibold text-gray-900">{app.jobId?.title || 'N/A'}</h4>
+                      <p className="text-sm text-gray-600">{app.companyId?.name || 'N/A'}</p>
                       <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3" />
-                          {application.location}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <DollarSign className="h-3 w-3" />
-                          {application.salary}
-                        </span>
+                        <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{app.location || 'N/A'}</span>
+                        <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" />{app.salary || 'N/A'}</span>
                       </div>
                     </div>
                   </div>
                   <div className="text-right">
-                    <Badge className={getStatusColor(application.status)}>
-                      {application.status}
-                    </Badge>
+                    <Badge className={getStatusColor(app.status)}>{app.status}</Badge>
                     <p className="text-xs text-gray-500 mt-1">
-                      Applied {new Date(application.appliedDate).toLocaleDateString()}
+                      Applied {new Date(app.createdAt).toLocaleDateString()}
                     </p>
                   </div>
                 </div>
               ))}
-              <Button variant="outline" className="w-full">
-                View All Applications
-              </Button>
+              <Button variant="outline" className="w-full">View All Applications</Button>
             </CardContent>
           </Card>
         </div>
@@ -277,12 +205,10 @@ const UserDashboard = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               {upcomingEvents.map((event) => (
-                <div key={event.id} className="p-3 border rounded-lg">
+                <div key={event._id} className="p-3 border rounded-lg">
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="font-medium text-sm">{event.title}</h4>
-                    <Badge variant="outline" className="text-xs">
-                      {event.type}
-                    </Badge>
+                    <Badge variant="outline" className="text-xs">{event.type}</Badge>
                   </div>
                   <p className="text-xs text-gray-600">{event.company}</p>
                   <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
@@ -291,9 +217,7 @@ const UserDashboard = () => {
                   </div>
                 </div>
               ))}
-              <Button variant="outline" size="sm" className="w-full">
-                View Calendar
-              </Button>
+              <Button variant="outline" size="sm" className="w-full">View Calendar</Button>
             </CardContent>
           </Card>
 
@@ -307,15 +231,13 @@ const UserDashboard = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               {notifications.slice(0, 3).map((notification) => (
-                <div key={notification.id} className="p-3 border rounded-lg">
+                <div key={notification._id} className="p-3 border rounded-lg">
                   <h4 className="font-medium text-sm">{notification.title}</h4>
                   <p className="text-xs text-gray-600 mt-1">{notification.message}</p>
-                  <p className="text-xs text-gray-400 mt-2">{notification.time}</p>
+                  <p className="text-xs text-gray-400 mt-2">{new Date(notification.createdAt).toLocaleString()}</p>
                 </div>
               ))}
-              <Button variant="outline" size="sm" className="w-full">
-                View All Notifications
-              </Button>
+              <Button variant="outline" size="sm" className="w-full">View All Notifications</Button>
             </CardContent>
           </Card>
         </div>

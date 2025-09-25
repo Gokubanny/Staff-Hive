@@ -1,5 +1,5 @@
 // src/components/UserAttendance.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,23 +10,20 @@ import {
   CheckCircle,
   XCircle,
   Calendar,
-  TrendingUp,
-  Timer,
-  AlertCircle,
-  User,
-  Building2,
   Activity,
   Wifi,
   WifiOff,
   RefreshCw,
   History,
-  BarChart3
+  BarChart3,
+  AlertCircle,
+  User
 } from 'lucide-react';
 import { useAttendance } from '../../contexts/AttendanceContext';
-import { useAuth } from '../../contexts/AuthContext'; // Assuming you have auth context
+import { useAuth } from '../../contexts/AuthContext';
 
 const UserAttendance = () => {
-  const { user } = useAuth(); // Get current user from auth context
+  const { user } = useAuth();
   const {
     todayAttendance,
     isLoading,
@@ -42,13 +39,11 @@ const UserAttendance = () => {
   const [location, setLocation] = useState('Loading...');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [actionLoading, setActionLoading] = useState(false);
+  const [offlineQueue, setOfflineQueue] = useState([]);
 
   // Update current time every second
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -59,25 +54,34 @@ const UserAttendance = () => {
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
+  // Sync offline actions
+  useEffect(() => {
+    if (isOnline && offlineQueue.length > 0) {
+      offlineQueue.forEach(async (action) => {
+        try {
+          if (action.type === 'checkin') await checkIn(action.data);
+          if (action.type === 'checkout') await checkOut(action.data.employeeId);
+        } catch (err) {
+          console.error('Offline action failed:', err);
+        }
+      });
+      setOfflineQueue([]);
+      if (user?.employeeId) loadTodayAttendance(user.employeeId);
+    }
+  }, [isOnline, offlineQueue, checkIn, checkOut, loadTodayAttendance, user?.employeeId]);
+
   // Get user's location
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          // In a real app, you'd reverse geocode these coordinates
-          setLocation('Office - Lagos, Nigeria');
-        },
-        (error) => {
-          console.warn('Location access denied:', error);
-          setLocation('Location unavailable');
-        }
+        () => setLocation('Office - Lagos, Nigeria'),
+        () => setLocation('Location unavailable')
       );
     } else {
       setLocation('Location not supported');
@@ -85,80 +89,90 @@ const UserAttendance = () => {
   }, []);
 
   // Load today's attendance on mount
-  useEffect(() => {
-    if (user?.employeeId) {
-      loadTodayAttendance(user.employeeId);
-    }
+  const loadAttendance = useCallback(() => {
+    if (user?.employeeId) loadTodayAttendance(user.employeeId);
   }, [user?.employeeId, loadTodayAttendance]);
 
+  useEffect(() => {
+    loadAttendance();
+  }, [loadAttendance]);
+
+  // ✅ Handle Check In with instant UI update
   const handleCheckIn = async () => {
     if (!user) return;
 
     setActionLoading(true);
     clearError();
+    const now = new Date();
+    const attendanceData = {
+      employeeId: user.employeeId,
+      name: user.name,
+      department: user.department,
+      email: user.email,
+      checkInTime: now.toISOString(),
+      checkOutTime: null
+    };
 
     try {
-      const attendanceData = {
-        employeeId: user.employeeId,
-        name: user.name,
-        department: user.department,
-        email: user.email
-      };
-
-      await checkIn(attendanceData);
-    } catch (error) {
-      console.error('Check-in failed:', error);
+      if (isOnline) {
+        await checkIn(attendanceData);
+        // instantly reflect in UI
+        loadTodayAttendance(user.employeeId, attendanceData);
+      } else {
+        setOfflineQueue(prev => [...prev, { type: 'checkin', data: attendanceData }]);
+        loadTodayAttendance(user.employeeId, attendanceData);
+      }
+    } catch (err) {
+      console.error('Check-in failed:', err);
     } finally {
       setActionLoading(false);
     }
   };
 
+  // ✅ Handle Check Out with instant UI update
   const handleCheckOut = async () => {
     if (!user?.employeeId) return;
 
     setActionLoading(true);
     clearError();
+    const now = new Date();
 
     try {
-      await checkOut(user.employeeId);
-    } catch (error) {
-      console.error('Check-out failed:', error);
+      if (isOnline) {
+        await checkOut(user.employeeId);
+        loadTodayAttendance(user.employeeId, {
+          ...todayAttendance,
+          checkOutTime: now.toISOString()
+        });
+      } else {
+        setOfflineQueue(prev => [...prev, { type: 'checkout', data: { employeeId: user.employeeId } }]);
+        loadTodayAttendance(user.employeeId, {
+          ...todayAttendance,
+          checkOutTime: now.toISOString()
+        });
+      }
+    } catch (err) {
+      console.error('Check-out failed:', err);
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleRefresh = () => {
-    if (user?.employeeId) {
-      loadTodayAttendance(user.employeeId);
-    }
-  };
+  const handleRefresh = () => loadAttendance();
 
   const formatTime = (date) => {
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    });
+    if (!date) return '--:--:--';
+    const d = new Date(date);
+    if (isNaN(d)) return '--:--:--';
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
-  const formatDate = (date) => {
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
+  const formatDate = date => date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   const getCurrentStatus = () => {
     if (!todayAttendance) return 'not-started';
-    
-    if (todayAttendance.checkInTime && !todayAttendance.checkOutTime) {
-      return 'working';
-    } else if (todayAttendance.checkInTime && todayAttendance.checkOutTime) {
-      return 'completed';
-    }
+    if (todayAttendance.checkInTime && !todayAttendance.checkOutTime) return 'working';
+    if (todayAttendance.checkInTime && todayAttendance.checkOutTime) return 'completed';
     return 'not-started';
   };
 
@@ -166,26 +180,11 @@ const UserAttendance = () => {
     const status = getCurrentStatus();
     switch (status) {
       case 'working':
-        return (
-          <Badge className="bg-green-100 text-green-800 flex items-center gap-1">
-            <Activity className="h-3 w-3" />
-            Working
-          </Badge>
-        );
+        return <Badge className="bg-green-100 text-green-800 flex items-center gap-1"><Activity className="h-3 w-3" />Working</Badge>;
       case 'completed':
-        return (
-          <Badge className="bg-blue-100 text-blue-800 flex items-center gap-1">
-            <CheckCircle className="h-3 w-3" />
-            Day Complete
-          </Badge>
-        );
+        return <Badge className="bg-blue-100 text-blue-800 flex items-center gap-1"><CheckCircle className="h-3 w-3" />Day Complete</Badge>;
       default:
-        return (
-          <Badge className="bg-gray-100 text-gray-800 flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            Not Started
-          </Badge>
-        );
+        return <Badge className="bg-gray-100 text-gray-800 flex items-center gap-1"><Clock className="h-3 w-3" />Not Started</Badge>;
     }
   };
 
@@ -195,7 +194,6 @@ const UserAttendance = () => {
     ? calculateDuration(todayAttendance.checkInTime, todayAttendance.checkOutTime || null)
     : '--';
 
-  // Show loading state
   if (isLoading && !todayAttendance) {
     return (
       <div className="p-6 space-y-6 bg-gray-50 min-h-screen">
@@ -238,7 +236,7 @@ const UserAttendance = () => {
           <p className="text-sm text-gray-600">{formatDate(currentTime)}</p>
         </div>
       </div>
-
+  
       {/* Error Display */}
       {error && (
         <Alert variant="destructive">
@@ -257,7 +255,7 @@ const UserAttendance = () => {
           </AlertDescription>
         </Alert>
       )}
-
+  
       {/* Offline Warning */}
       {!isOnline && (
         <Alert className="border-orange-200 bg-orange-50">
@@ -268,7 +266,7 @@ const UserAttendance = () => {
           </AlertDescription>
         </Alert>
       )}
-
+  
       {/* Today's Status Card */}
       <Card className="shadow-lg bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
         <CardHeader>
@@ -298,18 +296,18 @@ const UserAttendance = () => {
             <MapPin className="h-4 w-4" />
             <span>{location}</span>
           </div>
-
+  
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="text-center p-4 bg-white rounded-lg border">
               <p className="text-sm font-medium text-gray-600">Check In Time</p>
               <p className="text-xl font-bold text-green-600">
-                {todayAttendance?.checkInTime || '--:--:--'}
+                {todayAttendance?.checkInTime ? formatTime(todayAttendance.checkInTime) : '--:--:--'}
               </p>
             </div>
             <div className="text-center p-4 bg-white rounded-lg border">
               <p className="text-sm font-medium text-gray-600">Check Out Time</p>
               <p className="text-xl font-bold text-red-600">
-                {todayAttendance?.checkOutTime || '--:--:--'}
+                {todayAttendance?.checkOutTime ? formatTime(todayAttendance.checkOutTime) : '--:--:--'}
               </p>
             </div>
             <div className="text-center p-4 bg-white rounded-lg border">
@@ -319,7 +317,7 @@ const UserAttendance = () => {
           </div>
         </CardContent>
       </Card>
-
+  
       {/* Check In/Out Actions */}
       <Card className="shadow-lg">
         <CardHeader>
@@ -368,7 +366,7 @@ const UserAttendance = () => {
               <p className="text-xs text-blue-600 mt-1">Click "Check In" when you arrive at your workplace.</p>
             </div>
           )}
-
+  
           {isCheckedIn && !isCompleted && (
             <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
               <div className="flex items-center gap-2">
@@ -380,7 +378,7 @@ const UserAttendance = () => {
               </p>
             </div>
           )}
-
+  
           {isCompleted && (
             <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
               <div className="flex items-center gap-2">
@@ -392,7 +390,7 @@ const UserAttendance = () => {
           )}
         </CardContent>
       </Card>
-
+  
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="shadow-lg">
@@ -415,7 +413,7 @@ const UserAttendance = () => {
             </Button>
           </CardContent>
         </Card>
-
+  
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="text-lg">Today's Summary</CardTitle>

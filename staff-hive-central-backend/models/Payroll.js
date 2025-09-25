@@ -1,4 +1,3 @@
-// models/Payroll.js
 const mongoose = require('mongoose');
 
 const payrollSchema = new mongoose.Schema({
@@ -46,7 +45,7 @@ const payrollSchema = new mongoose.Schema({
   },
   totalAmount: {
     type: Number,
-    required: [true, 'Total amount is required'],
+    required: true,
     min: [0, 'Total amount must be positive']
   },
   period: {
@@ -80,6 +79,33 @@ const payrollSchema = new mongoose.Schema({
 // Virtual for total deductions
 payrollSchema.virtual('totalDeductions').get(function() {
   return (this.deductions.tax || 0) + (this.deductions.pension || 0) + (this.deductions.other || 0);
+});
+
+// Pre-save hook to calculate totalAmount on creation
+payrollSchema.pre('save', function(next) {
+  this.totalAmount = (this.baseSalary || 0) + (this.overtime || 0) + (this.bonuses || 0) - this.totalDeductions;
+  next();
+});
+
+// Pre-update hook to recalculate totalAmount on findOneAndUpdate
+payrollSchema.pre('findOneAndUpdate', function(next) {
+  const update = this.getUpdate();
+
+  // Get the fields from the update or fallback to 0
+  const baseSalary = update.baseSalary ?? 0;
+  const overtime = update.overtime ?? 0;
+  const bonuses = update.bonuses ?? 0;
+  const deductions = update.deductions ?? {};
+
+  const tax = deductions.tax ?? 0;
+  const pension = deductions.pension ?? 0;
+  const other = deductions.other ?? 0;
+
+  const totalDeductions = tax + pension + other;
+  update.totalAmount = baseSalary + overtime + bonuses - totalDeductions;
+
+  this.setUpdate(update);
+  next();
 });
 
 // Compound index to prevent duplicate payroll for same employee and period

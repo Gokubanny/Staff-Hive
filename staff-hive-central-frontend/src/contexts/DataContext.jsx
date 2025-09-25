@@ -1,4 +1,4 @@
-// contexts/DataContext.js - Updated to use backend API
+// src/contexts/DataContext.js
 import { createContext, useContext, useReducer, useEffect } from 'react';
 import { 
   authAPI, 
@@ -58,116 +58,82 @@ const dataReducer = (state, action) => {
   switch (action.type) {
     case ACTIONS.SET_LOADING:
       return { ...state, loading: action.payload };
-    
     case ACTIONS.SET_ERROR:
       return { ...state, error: action.payload, loading: false };
-    
     case ACTIONS.SET_USER:
       return { ...state, user: action.payload };
-    
     case ACTIONS.SET_EMPLOYEES:
       return { ...state, employees: action.payload };
-    
     case ACTIONS.ADD_EMPLOYEE:
       return { ...state, employees: [...state.employees, action.payload] };
-    
     case ACTIONS.UPDATE_EMPLOYEE:
-      return {
-        ...state,
-        employees: state.employees.map(emp =>
-          emp._id === action.payload._id ? action.payload : emp
-        ),
+      return { 
+        ...state, 
+        employees: state.employees.map(emp => emp._id === action.payload._id ? action.payload : emp) 
       };
-    
     case ACTIONS.DELETE_EMPLOYEE:
-      return {
-        ...state,
-        employees: state.employees.filter(emp => emp._id !== action.payload),
+      return { 
+        ...state, 
+        employees: state.employees.filter(emp => emp._id !== action.payload) 
       };
-    
     case ACTIONS.SET_COMPANIES:
       return { ...state, companies: action.payload };
-    
     case ACTIONS.ADD_COMPANY:
       return { ...state, companies: [...state.companies, action.payload] };
-    
     case ACTIONS.UPDATE_COMPANY:
-      return {
-        ...state,
-        companies: state.companies.map(comp =>
-          comp._id === action.payload._id ? action.payload : comp
-        ),
+      return { 
+        ...state, 
+        companies: state.companies.map(comp => comp._id === action.payload._id ? action.payload : comp) 
       };
-    
     case ACTIONS.DELETE_COMPANY:
-      return {
-        ...state,
-        companies: state.companies.filter(comp => comp._id !== action.payload),
+      return { 
+        ...state, 
+        companies: state.companies.filter(comp => comp._id !== action.payload) 
       };
-    
     case ACTIONS.SET_APPLICANTS:
       return { ...state, applicants: action.payload };
-    
     case ACTIONS.ADD_APPLICANT:
       return { ...state, applicants: [...state.applicants, action.payload] };
-    
     case ACTIONS.UPDATE_APPLICANT:
-      return {
-        ...state,
-        applicants: state.applicants.map(app =>
-          app._id === action.payload._id ? action.payload : app
-        ),
+      return { 
+        ...state, 
+        applicants: state.applicants.map(app => app._id === action.payload._id ? action.payload : app) 
       };
-    
     case ACTIONS.DELETE_APPLICANT:
-      return {
-        ...state,
-        applicants: state.applicants.filter(app => app._id !== action.payload),
+      return { 
+        ...state, 
+        applicants: state.applicants.filter(app => app._id !== action.payload) 
       };
-    
     case ACTIONS.SET_JOBS:
       return { ...state, jobs: action.payload };
-    
     case ACTIONS.ADD_JOB:
       return { ...state, jobs: [...state.jobs, action.payload] };
-    
     case ACTIONS.UPDATE_JOB:
-      return {
-        ...state,
-        jobs: state.jobs.map(job =>
-          job._id === action.payload._id ? action.payload : job
-        ),
+      return { 
+        ...state, 
+        jobs: state.jobs.map(job => job._id === action.payload._id ? action.payload : job) 
       };
-    
     case ACTIONS.DELETE_JOB:
-      return {
-        ...state,
-        jobs: state.jobs.filter(job => job._id !== action.payload),
+      return { 
+        ...state, 
+        jobs: state.jobs.filter(job => job._id !== action.payload) 
       };
-    
     case ACTIONS.SET_PAYROLL:
       return { ...state, payroll: action.payload };
-    
     case ACTIONS.ADD_PAYROLL:
       return { ...state, payroll: [...state.payroll, action.payload] };
-    
     case ACTIONS.UPDATE_PAYROLL:
-      return {
-        ...state,
-        payroll: state.payroll.map(pay =>
-          pay._id === action.payload._id ? action.payload : pay
-        ),
+      return { 
+        ...state, 
+        payroll: state.payroll.map(pay => pay._id === action.payload._id ? action.payload : pay) 
       };
-    
     case ACTIONS.DELETE_PAYROLL:
-      return {
-        ...state,
-        payroll: state.payroll.filter(pay => pay._id !== action.payload),
+      return { 
+        ...state, 
+        payroll: state.payroll.filter(pay => pay._id !== action.payload) 
       };
-    
     case ACTIONS.SET_ANALYTICS:
       return { ...state, analytics: action.payload };
-    
     default:
       return state;
   }
@@ -176,50 +142,55 @@ const dataReducer = (state, action) => {
 export const DataProvider = ({ children }) => {
   const [state, dispatch] = useReducer(dataReducer, initialState);
 
-  // Helper function to handle API calls
+  // Generic API handler
   const handleApiCall = async (apiCall, onSuccess, onError) => {
     try {
       dispatch({ type: ACTIONS.SET_LOADING, payload: true });
       dispatch({ type: ACTIONS.SET_ERROR, payload: null });
-      
+
       const response = await apiCall();
-      onSuccess(response);
+      if (onSuccess) onSuccess(response || {});
+      return response;
     } catch (error) {
       console.error('API Error:', error);
-      dispatch({ type: ACTIONS.SET_ERROR, payload: error.message });
+      dispatch({ type: ACTIONS.SET_ERROR, payload: error?.message || 'Unknown API error' });
       if (onError) onError(error);
+      return null;
     } finally {
       dispatch({ type: ACTIONS.SET_LOADING, payload: false });
     }
   };
 
   // Authentication
-  const login = async (credentials) => {
-    return handleApiCall(
+  const login = async (credentials) =>
+    handleApiCall(
       () => authAPI.login(credentials),
       (response) => {
-        localStorage.setItem('token', response.data.token);
-        dispatch({ type: ACTIONS.SET_USER, payload: response.data.user });
-        return response;
+        const token = response?.data?.token;
+        const user = response?.data?.user;
+        if (token && user) {
+          localStorage.setItem('token', token);
+          dispatch({ type: ACTIONS.SET_USER, payload: user });
+        }
       }
     );
-  };
 
-  const register = async (userData) => {
-    return handleApiCall(
+  const register = async (userData) =>
+    handleApiCall(
       () => authAPI.register(userData),
       (response) => {
-        localStorage.setItem('token', response.data.token);
-        dispatch({ type: ACTIONS.SET_USER, payload: response.data.user });
-        return response;
+        const token = response?.data?.token;
+        const user = response?.data?.user;
+        if (token && user) {
+          localStorage.setItem('token', token);
+          dispatch({ type: ACTIONS.SET_USER, payload: user });
+        }
       }
     );
-  };
 
   const logout = () => {
     localStorage.removeItem('token');
     dispatch({ type: ACTIONS.SET_USER, payload: null });
-    // Clear all data
     dispatch({ type: ACTIONS.SET_EMPLOYEES, payload: [] });
     dispatch({ type: ACTIONS.SET_COMPANIES, payload: [] });
     dispatch({ type: ACTIONS.SET_APPLICANTS, payload: [] });
@@ -229,196 +200,83 @@ export const DataProvider = ({ children }) => {
   };
 
   // Employee operations
-  const fetchEmployees = () => {
+  const fetchEmployees = () =>
     handleApiCall(
       () => employeeAPI.getAll(),
-      (response) => dispatch({ type: ACTIONS.SET_EMPLOYEES, payload: response.data })
-    );
-  };
-
-  const addEmployee = async (employeeData) => {
-    return handleApiCall(
-      () => employeeAPI.create(employeeData),
       (response) => {
-        dispatch({ type: ACTIONS.ADD_EMPLOYEE, payload: response.data });
-        return response;
+        const data = Array.isArray(response?.data) ? response.data : response?.data?.employees || [];
+        dispatch({ type: ACTIONS.SET_EMPLOYEES, payload: data });
       }
     );
-  };
 
-  const updateEmployee = async (id, employeeData) => {
-    return handleApiCall(
-      () => employeeAPI.update(id, employeeData),
-      (response) => {
-        dispatch({ type: ACTIONS.UPDATE_EMPLOYEE, payload: response.data });
-        return response;
-      }
-    );
-  };
+  const addEmployee = (data) =>
+    handleApiCall(() => employeeAPI.create(data), (res) => dispatch({ type: ACTIONS.ADD_EMPLOYEE, payload: res?.data }));
 
-  const deleteEmployee = async (id) => {
-    return handleApiCall(
-      () => employeeAPI.delete(id),
-      () => dispatch({ type: ACTIONS.DELETE_EMPLOYEE, payload: id })
-    );
-  };
+  const updateEmployee = (id, data) =>
+    handleApiCall(() => employeeAPI.update(id, data), (res) => dispatch({ type: ACTIONS.UPDATE_EMPLOYEE, payload: res?.data }));
+
+  const deleteEmployee = (id) =>
+    handleApiCall(() => employeeAPI.delete(id), () => dispatch({ type: ACTIONS.DELETE_EMPLOYEE, payload: id }));
 
   // Company operations
-  const fetchCompanies = () => {
-    handleApiCall(
-      () => companyAPI.getAll(),
-      (response) => dispatch({ type: ACTIONS.SET_COMPANIES, payload: response.data })
-    );
-  };
+  const fetchCompanies = () =>
+    handleApiCall(() => companyAPI.getAll(), (res) => dispatch({ type: ACTIONS.SET_COMPANIES, payload: res?.data || [] }));
 
-  const addCompany = async (companyData) => {
-    return handleApiCall(
-      () => companyAPI.create(companyData),
-      (response) => {
-        dispatch({ type: ACTIONS.ADD_COMPANY, payload: response.data });
-        return response;
-      }
-    );
-  };
+  const addCompany = (data) =>
+    handleApiCall(() => companyAPI.create(data), (res) => dispatch({ type: ACTIONS.ADD_COMPANY, payload: res?.data }));
 
-  const updateCompany = async (id, companyData) => {
-    return handleApiCall(
-      () => companyAPI.update(id, companyData),
-      (response) => {
-        dispatch({ type: ACTIONS.UPDATE_COMPANY, payload: response.data });
-        return response;
-      }
-    );
-  };
+  const updateCompany = (id, data) =>
+    handleApiCall(() => companyAPI.update(id, data), (res) => dispatch({ type: ACTIONS.UPDATE_COMPANY, payload: res?.data }));
 
-  const deleteCompany = async (id) => {
-    return handleApiCall(
-      () => companyAPI.delete(id),
-      () => dispatch({ type: ACTIONS.DELETE_COMPANY, payload: id })
-    );
-  };
+  const deleteCompany = (id) =>
+    handleApiCall(() => companyAPI.delete(id), () => dispatch({ type: ACTIONS.DELETE_COMPANY, payload: id }));
 
   // Applicant operations
-  const fetchApplicants = () => {
-    handleApiCall(
-      () => applicantAPI.getAll(),
-      (response) => dispatch({ type: ACTIONS.SET_APPLICANTS, payload: response.data })
-    );
-  };
+  const fetchApplicants = () =>
+    handleApiCall(() => applicantAPI.getAll(), (res) => dispatch({ type: ACTIONS.SET_APPLICANTS, payload: res?.data || [] }));
 
-  const addApplicant = async (applicantData) => {
-    return handleApiCall(
-      () => applicantAPI.create(applicantData),
-      (response) => {
-        dispatch({ type: ACTIONS.ADD_APPLICANT, payload: response.data });
-        return response;
-      }
-    );
-  };
+  const addApplicant = (data) =>
+    handleApiCall(() => applicantAPI.create(data), (res) => dispatch({ type: ACTIONS.ADD_APPLICANT, payload: res?.data }));
 
-  const updateApplicant = async (id, applicantData) => {
-    return handleApiCall(
-      () => applicantAPI.update(id, applicantData),
-      (response) => {
-        dispatch({ type: ACTIONS.UPDATE_APPLICANT, payload: response.data });
-        return response;
-      }
-    );
-  };
+  const updateApplicant = (id, data) =>
+    handleApiCall(() => applicantAPI.update(id, data), (res) => dispatch({ type: ACTIONS.UPDATE_APPLICANT, payload: res?.data }));
 
-  const updateApplicantStage = async (id, stage) => {
-    return handleApiCall(
-      () => applicantAPI.updateStage(id, stage),
-      (response) => {
-        dispatch({ type: ACTIONS.UPDATE_APPLICANT, payload: response.data });
-        return response;
-      }
-    );
-  };
+  const updateApplicantStage = (id, stage) =>
+    handleApiCall(() => applicantAPI.updateStage(id, stage), (res) => dispatch({ type: ACTIONS.UPDATE_APPLICANT, payload: res?.data }));
 
-  const deleteApplicant = async (id) => {
-    return handleApiCall(
-      () => applicantAPI.delete(id),
-      () => dispatch({ type: ACTIONS.DELETE_APPLICANT, payload: id })
-    );
-  };
+  const deleteApplicant = (id) =>
+    handleApiCall(() => applicantAPI.delete(id), () => dispatch({ type: ACTIONS.DELETE_APPLICANT, payload: id }));
 
   // Job operations
-  const fetchJobs = () => {
-    handleApiCall(
-      () => jobAPI.getAll(),
-      (response) => dispatch({ type: ACTIONS.SET_JOBS, payload: response.data })
-    );
-  };
+  const fetchJobs = () =>
+    handleApiCall(() => jobAPI.getAll(), (res) => dispatch({ type: ACTIONS.SET_JOBS, payload: res?.data || [] }));
 
-  const addJob = async (jobData) => {
-    return handleApiCall(
-      () => jobAPI.create(jobData),
-      (response) => {
-        dispatch({ type: ACTIONS.ADD_JOB, payload: response.data });
-        return response;
-      }
-    );
-  };
+  const addJob = (data) =>
+    handleApiCall(() => jobAPI.create(data), (res) => dispatch({ type: ACTIONS.ADD_JOB, payload: res?.data }));
 
-  const updateJob = async (id, jobData) => {
-    return handleApiCall(
-      () => jobAPI.update(id, jobData),
-      (response) => {
-        dispatch({ type: ACTIONS.UPDATE_JOB, payload: response.data });
-        return response;
-      }
-    );
-  };
+  const updateJob = (id, data) =>
+    handleApiCall(() => jobAPI.update(id, data), (res) => dispatch({ type: ACTIONS.UPDATE_JOB, payload: res?.data }));
 
-  const deleteJob = async (id) => {
-    return handleApiCall(
-      () => jobAPI.delete(id),
-      () => dispatch({ type: ACTIONS.DELETE_JOB, payload: id })
-    );
-  };
+  const deleteJob = (id) =>
+    handleApiCall(() => jobAPI.delete(id), () => dispatch({ type: ACTIONS.DELETE_JOB, payload: id }));
 
   // Payroll operations
-  const fetchPayroll = () => {
-    handleApiCall(
-      () => payrollAPI.getAll(),
-      (response) => dispatch({ type: ACTIONS.SET_PAYROLL, payload: response.data })
-    );
-  };
+  const fetchPayroll = () =>
+    handleApiCall(() => payrollAPI.getAll(), (res) => dispatch({ type: ACTIONS.SET_PAYROLL, payload: res?.data || [] }));
 
-  const addPayrollRecord = async (payrollData) => {
-    return handleApiCall(
-      () => payrollAPI.create(payrollData),
-      (response) => {
-        dispatch({ type: ACTIONS.ADD_PAYROLL, payload: response.data });
-        return response;
-      }
-    );
-  };
+  const addPayrollRecord = (data) =>
+    handleApiCall(() => payrollAPI.create(data), (res) => dispatch({ type: ACTIONS.ADD_PAYROLL, payload: res?.data }));
 
-  const generatePayroll = async (employeeIds, period) => {
-    return handleApiCall(
-      () => payrollAPI.generate(employeeIds, period),
-      (response) => {
-        // Refresh payroll data after generation
-        fetchPayroll();
-        return response;
-      }
-    );
-  };
+  const generatePayroll = (employeeIds, period) =>
+    handleApiCall(() => payrollAPI.generate(employeeIds, period), () => fetchPayroll());
 
   // Analytics
-  const fetchAnalytics = () => {
-    handleApiCall(
-      () => analyticsAPI.getDashboard(),
-      (response) => dispatch({ type: ACTIONS.SET_ANALYTICS, payload: response.data })
-    );
-  };
+  const fetchAnalytics = () =>
+    handleApiCall(() => analyticsAPI.getDashboard(), (res) => dispatch({ type: ACTIONS.SET_ANALYTICS, payload: res?.data }));
 
-  // Load initial data when user is authenticated
+  // Load initial data when user exists
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token && state.user) {
+    if (state.user) {
       fetchEmployees();
       fetchCompanies();
       fetchApplicants();
@@ -428,66 +286,48 @@ export const DataProvider = ({ children }) => {
     }
   }, [state.user]);
 
-  // Check for existing token on mount
+  // Check existing token
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
       handleApiCall(
         () => authAPI.getCurrentUser(),
-        (response) => dispatch({ type: ACTIONS.SET_USER, payload: response.data.user }),
-        () => {
-          // Token is invalid, remove it
-          localStorage.removeItem('token');
-        }
+        (res) => dispatch({ type: ACTIONS.SET_USER, payload: res?.data?.user || null }),
+        () => localStorage.removeItem('token')
       );
     }
   }, []);
 
-  const value = {
-    // State
-    ...state,
-    
-    // Auth
-    login,
-    register,
-    logout,
-    
-    // Employees
-    fetchEmployees,
-    addEmployee,
-    updateEmployee,
-    deleteEmployee,
-    
-    // Companies
-    fetchCompanies,
-    addCompany,
-    updateCompany,
-    deleteCompany,
-    
-    // Applicants
-    fetchApplicants,
-    addApplicant,
-    updateApplicant,
-    updateApplicantStage,
-    deleteApplicant,
-    
-    // Jobs
-    fetchJobs,
-    addJob,
-    updateJob,
-    deleteJob,
-    
-    // Payroll
-    fetchPayroll,
-    addPayrollRecord,
-    generatePayroll,
-    
-    // Analytics
-    fetchAnalytics,
-  };
-
   return (
-    <DataContext.Provider value={value}>
+    <DataContext.Provider
+      value={{
+        ...state,
+        login,
+        register,
+        logout,
+        fetchEmployees,
+        addEmployee,
+        updateEmployee,
+        deleteEmployee,
+        fetchCompanies,
+        addCompany,
+        updateCompany,
+        deleteCompany,
+        fetchApplicants,
+        addApplicant,
+        updateApplicant,
+        updateApplicantStage,
+        deleteApplicant,
+        fetchJobs,
+        addJob,
+        updateJob,
+        deleteJob,
+        fetchPayroll,
+        addPayrollRecord,
+        generatePayroll,
+        fetchAnalytics,
+      }}
+    >
       {children}
     </DataContext.Provider>
   );
@@ -495,8 +335,6 @@ export const DataProvider = ({ children }) => {
 
 export const useData = () => {
   const context = useContext(DataContext);
-  if (!context) {
-    throw new Error('useData must be used within a DataProvider');
-  }
+  if (!context) throw new Error('useData must be used within a DataProvider');
   return context;
 };

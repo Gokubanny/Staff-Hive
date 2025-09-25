@@ -1,20 +1,17 @@
-// models/Applicant.js
+// models/Applicant.js - Job applicants model
 const mongoose = require('mongoose');
 
 const applicantSchema = new mongoose.Schema({
+  // Personal Information
   firstName: {
     type: String,
     required: [true, 'First name is required'],
-    trim: true,
-    minlength: [2, 'First name must be at least 2 characters'],
-    maxlength: [50, 'First name cannot exceed 50 characters']
+    trim: true
   },
   lastName: {
     type: String,
     required: [true, 'Last name is required'],
-    trim: true,
-    minlength: [2, 'Last name must be at least 2 characters'],
-    maxlength: [50, 'Last name cannot exceed 50 characters']
+    trim: true
   },
   email: {
     type: String,
@@ -26,81 +23,96 @@ const applicantSchema = new mongoose.Schema({
   phone: {
     type: String,
     required: [true, 'Phone number is required'],
-    trim: true,
-    minlength: [10, 'Phone number must be at least 10 characters']
-  },
-  position: {
-    type: String,
-    required: [true, 'Position is required'],
     trim: true
   },
-  experience: {
-    type: String,
-    required: [true, 'Experience level is required'],
-    enum: ['Entry Level (0-1 years)', 'Junior (1-3 years)', 'Mid-Level (3-5 years)', 'Senior (5-8 years)', 'Lead (8+ years)', 'Executive (10+ years)']
+  
+  // Application Information
+  jobId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Job',
+    required: true
   },
-  expectedSalary: {
-    type: Number,
-    min: [0, 'Expected salary must be positive']
+  companyId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Company',
+    required: true
   },
-  location: {
-    type: String,
-    trim: true
-  },
-  source: {
-    type: String,
-    trim: true,
-    enum: ['Company Website', 'LinkedIn', 'Indeed', 'Glassdoor', 'Referral', 'Job Fair', 'Recruitment Agency', 'Social Media', 'Other']
-  },
-  resume: {
+  resumeUrl: {
     type: String,
     trim: true
   },
   coverLetter: {
     type: String,
-    trim: true,
-    maxlength: [2000, 'Cover letter cannot exceed 2000 characters']
+    trim: true
   },
-  notes: {
-    type: String,
-    trim: true,
-    maxlength: [1000, 'Notes cannot exceed 1000 characters']
-  },
+  
+  // Application Status
   stage: {
     type: String,
-    enum: ['applied', 'screening', 'interview', 'offer', 'hired', 'rejected'],
-    default: 'applied'
+    enum: ['Applied', 'Screening', 'Interview', 'Assessment', 'Reference Check', 'Offer', 'Hired', 'Rejected'],
+    default: 'Applied'
   },
-  appliedDate: {
-    type: Date,
-    default: Date.now
+  status: {
+    type: String,
+    enum: ['Active', 'Withdrawn', 'Rejected', 'Hired'],
+    default: 'Active'
   },
-  jobId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Job'
+  
+  // Experience and Skills
+  experience: {
+    type: Number,
+    required: true,
+    min: [0, 'Experience cannot be negative']
   },
-  userId: {
+  skills: [{
+    type: String,
+    trim: true
+  }],
+  education: {
+    degree: { type: String, required: true },
+    field: { type: String, required: true },
+    institution: { type: String, required: true },
+    year: { type: Number, required: true }
+  },
+  
+  // Interview Information
+  interviews: [{
+    date: { type: Date, required: true },
+    interviewer: { type: String, required: true },
+    type: { 
+      type: String, 
+      enum: ['Phone', 'Video', 'In-Person', 'Technical'], 
+      required: true 
+    },
+    notes: { type: String },
+    rating: { 
+      type: Number, 
+      min: 1, 
+      max: 10 
+    }
+  }],
+  
+  // Notes and Comments
+  notes: {
+    type: String,
+    trim: true
+  },
+  
+  // References
+  createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
-  },
-  rating: {
-    type: Number,
-    min: 0,
-    max: 5,
-    default: 0
   }
 }, {
   timestamps: true
 });
 
-// Virtual for full name
-applicantSchema.virtual('fullName').get(function() {
-  return `${this.firstName} ${this.lastName}`;
-});
-
-// Compound index for user-specific applicant emails
-applicantSchema.index({ userId: 1, email: 1 }, { unique: true });
-applicantSchema.index({ userId: 1, stage: 1 });
+// Create indexes
+applicantSchema.index({ jobId: 1 });
+applicantSchema.index({ companyId: 1 });
+applicantSchema.index({ email: 1, jobId: 1 }, { unique: true }); // Prevent duplicate applications
+applicantSchema.index({ stage: 1 });
+applicantSchema.index({ status: 1 });
 
 module.exports = mongoose.model('Applicant', applicantSchema);

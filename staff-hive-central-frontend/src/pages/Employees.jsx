@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Edit, Trash2, Search } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Users } from "lucide-react"; // ✅ Added Users
 import { useNavigate } from "react-router-dom";
 import AddEmployee from "../components/AddEmployee";
 
@@ -110,7 +110,7 @@ export default function Employees() {
 
           {employees.length === 0 ? (
             <div className="text-center py-8">
-              <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" /> {/* ✅ Now works */}
               <h3 className="text-lg font-medium text-gray-900 mb-2">No employees yet</h3>
               <p className="text-gray-600 mb-4">Start by adding your first employee</p>
               <Button onClick={() => setIsAddDialogOpen(true)}>

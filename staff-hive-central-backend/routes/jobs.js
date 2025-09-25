@@ -1,41 +1,37 @@
-// routes/jobs.js - Corrected version with complete functionality
+// routes/jobs.js - Job routes
 const express = require('express');
 const router = express.Router();
-const { body, validationResult } = require('express-validator');
-const { auth } = require('../middleware/auth'); // Fixed: destructured import
+const { body } = require('express-validator');
+const { auth } = require('../middleware/auth');
 const Job = require('../models/Job');
+const { validationResult } = require('express-validator');
 
-// Validation rules
+// Job validation rules
 const jobValidation = [
-  body('title').trim().isLength({ min: 2, max: 200 }).withMessage('Job title must be between 2 and 200 characters'),
-  body('company').trim().isLength({ min: 2 }).withMessage('Company name is required'),
-  body('department').trim().isLength({ min: 2 }).withMessage('Department is required'),
-  body('location').trim().isLength({ min: 2 }).withMessage('Location is required'),
-  body('type').isIn(['full-time', 'part-time', 'contract', 'internship']).withMessage('Please select a valid job type'),
-  body('description').trim().isLength({ min: 10, max: 5000 }).withMessage('Description must be between 10 and 5000 characters'),
-  body('experienceLevel').isIn(['entry', 'junior', 'mid', 'senior', 'lead', 'executive']).withMessage('Please select a valid experience level'),
-  body('salary').optional().isNumeric().withMessage('Salary must be a number'),
-  body('requirements').optional().isArray().withMessage('Requirements must be an array'),
-  body('benefits').optional().isArray().withMessage('Benefits must be an array')
+  body('title').trim().isLength({ min: 2, max: 100 }).withMessage('Job title must be between 2 and 100 characters'),
+  body('description').trim().isLength({ min: 50 }).withMessage('Job description must be at least 50 characters'),
+  body('department').trim().notEmpty().withMessage('Department is required'),
+  body('location').trim().notEmpty().withMessage('Location is required'),
+  body('employmentType').isIn(['Full-time', 'Part-time', 'Contract', 'Intern']).withMessage('Please select a valid employment type'),
+  body('experienceLevel').isIn(['Entry Level', 'Mid Level', 'Senior Level', 'Executive']).withMessage('Please select a valid experience level'),
+  body('applicationDeadline').isISO8601().withMessage('Please provide a valid application deadline'),
+  body('salaryRange.min').isNumeric().withMessage('Minimum salary must be a number'),
+  body('salaryRange.max').isNumeric().withMessage('Maximum salary must be a number')
 ];
 
-const statusValidation = [
-  body('status').isIn(['active', 'paused', 'closed']).withMessage('Status must be active, paused, or closed')
-];
-
-// Get all jobs for logged-in user
-const getJobs = async (req, res) => {
+// Get all jobs
+router.get('/', auth, async (req, res) => {
   try {
-    const { status, search, page = 1, limit = 10 } = req.query;
-    let query = { userId: req.user.userId }; // Fixed: using userId instead of id
+    const { search, page = 1, limit = 10, status, department } = req.query;
+    let query = { createdBy: req.user.userId };
     
-    if (status && status !== 'all') {
-      query.status = status;
-    }
+    // Add filters
+    if (status && status !== 'all') query.status = status;
+    if (department && department !== 'all') query.department = department;
     
     const skip = (page - 1) * limit;
     
-    const jobs = await Job.find(query)
+    let jobs = await Job.find(query)
       .populate('companyId', 'name')
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -44,20 +40,20 @@ const getJobs = async (req, res) => {
     const total = await Job.countDocuments(query);
     
     // Filter by search term if provided
-    let filteredJobs = jobs;
     if (search) {
       const searchLower = search.toLowerCase();
-      filteredJobs = jobs.filter(job =>
+      jobs = jobs.filter(job =>
         job.title.toLowerCase().includes(searchLower) ||
-        job.company.toLowerCase().includes(searchLower) ||
-        job.department.toLowerCase().includes(searchLower)
+        job.description.toLowerCase().includes(searchLower) ||
+        job.department.toLowerCase().includes(searchLower) ||
+        job.location.toLowerCase().includes(searchLower)
       );
     }
     
     res.json({
       success: true,
-      data: filteredJobs,
-      count: filteredJobs.length,
+      data: jobs,
+      count: jobs.length,
       total,
       page: parseInt(page),
       pages: Math.ceil(total / limit)
@@ -70,14 +66,14 @@ const getJobs = async (req, res) => {
       error: error.message
     });
   }
-};
+});
 
 // Get single job
-const getJob = async (req, res) => {
+router.get('/:id', auth, async (req, res) => {
   try {
-    const job = await Job.findOne({ 
-      _id: req.params.id, 
-      userId: req.user.userId 
+    const job = await Job.findOne({
+      _id: req.params.id,
+      createdBy: req.user.userId
     }).populate('companyId', 'name');
     
     if (!job) {
@@ -99,10 +95,10 @@ const getJob = async (req, res) => {
       error: error.message
     });
   }
-};
+});
 
-// Add new job
-const addJob = async (req, res) => {
+// Create new job
+router.post('/', auth, jobValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -115,31 +111,32 @@ const addJob = async (req, res) => {
 
     const jobData = {
       ...req.body,
-      userId: req.user.userId, // Fixed: using userId instead of id
-      status: req.body.status || 'active',
-      postedDate: new Date()
+      createdBy: req.user.userId
     };
     
     const newJob = new Job(jobData);
     await newJob.save();
     
+    // Populate references before sending response
+    await newJob.populate('companyId', 'name');
+    
     res.status(201).json({
       success: true,
-      message: 'Job posted successfully',
+      message: 'Job created successfully',
       data: newJob
     });
   } catch (error) {
-    console.error('Error adding job:', error);
+    console.error('Error creating job:', error);
     res.status(500).json({
       success: false,
-      message: 'Error posting job',
+      message: 'Error creating job',
       error: error.message
     });
   }
-};
+});
 
 // Update job
-const updateJob = async (req, res) => {
+router.put('/:id', auth, jobValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -151,10 +148,10 @@ const updateJob = async (req, res) => {
     }
 
     const updatedJob = await Job.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user.userId }, // Fixed: using userId
+      { _id: req.params.id, createdBy: req.user.userId },
       req.body,
       { new: true, runValidators: true }
-    );
+    ).populate('companyId', 'name');
     
     if (!updatedJob) {
       return res.status(404).json({
@@ -176,56 +173,14 @@ const updateJob = async (req, res) => {
       error: error.message
     });
   }
-};
-
-// Update job status
-const updateJobStatus = async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation errors',
-        errors: errors.array()
-      });
-    }
-
-    const { status } = req.body;
-    
-    const updatedJob = await Job.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user.userId },
-      { status },
-      { new: true, runValidators: true }
-    );
-    
-    if (!updatedJob) {
-      return res.status(404).json({
-        success: false,
-        message: 'Job not found'
-      });
-    }
-    
-    res.json({
-      success: true,
-      message: 'Job status updated successfully',
-      data: updatedJob
-    });
-  } catch (error) {
-    console.error('Error updating job status:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error updating job status',
-      error: error.message
-    });
-  }
-};
+});
 
 // Delete job
-const deleteJob = async (req, res) => {
+router.delete('/:id', auth, async (req, res) => {
   try {
     const deletedJob = await Job.findOneAndDelete({
       _id: req.params.id,
-      userId: req.user.userId // Fixed: using userId
+      createdBy: req.user.userId
     });
     
     if (!deletedJob) {
@@ -247,14 +202,6 @@ const deleteJob = async (req, res) => {
       error: error.message
     });
   }
-};
-
-// Routes
-router.get('/', auth, getJobs);
-router.get('/:id', auth, getJob); // Added: Get single job
-router.post('/', auth, jobValidation, addJob);
-router.put('/:id', auth, jobValidation, updateJob);
-router.patch('/:id/status', auth, statusValidation, updateJobStatus); // Added: Update status
-router.delete('/:id', auth, deleteJob);
+});
 
 module.exports = router;
