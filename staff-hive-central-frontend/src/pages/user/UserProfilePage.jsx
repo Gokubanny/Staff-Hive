@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -7,6 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { useAuth } from '@/contexts/AuthContext';
+import { useData } from '@/contexts/DataContext';
+import { useToast } from '@/hooks/use-toast';
 import { 
   User, 
   Mail, 
@@ -23,88 +26,174 @@ import {
   Camera,
   Award,
   GraduationCap,
-  Building
+  Building,
+  Building2
 } from 'lucide-react';
 
 const UserProfilePage = () => {
+  const { user: authUser, updateProfile } = useAuth();
+  const { employees, updateEmployee, fetchEmployees } = useData();
+  const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState('personal');
+  const [loading, setLoading] = useState(true);
+  const [dataLoaded, setDataLoaded] = useState(false);
   
   const [profileData, setProfileData] = useState({
     // Personal Information
-    firstName: 'John',
-    lastName: 'Doe',
-    email: 'john.doe@example.com',
-    phone: '+1 (555) 123-4567',
-    dateOfBirth: '1990-05-15',
-    address: '123 Main Street, San Francisco, CA 94102',
-    bio: 'Passionate software developer with 5+ years of experience in full-stack development. Love creating innovative solutions and working with cutting-edge technologies.',
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    dateOfBirth: '',
+    address: '',
+    bio: '',
     
     // Professional Information
-    currentTitle: 'Senior Frontend Developer',
-    currentCompany: 'TechCorp Inc.',
-    yearsExperience: '5-7',
-    industry: 'Technology',
-    salaryExpectation: '120000',
-    salaryCurrency: 'USD',
-    noticePeriod: '2-weeks',
+    currentTitle: '',
+    currentCompany: '',
+    yearsExperience: '',
+    industry: '',
+    salary: '',
+    salaryCurrency: 'NGN',
+    noticePeriod: '',
     
     // Skills
-    skills: ['React', 'Node.js', 'JavaScript', 'TypeScript', 'Python', 'AWS', 'MongoDB', 'GraphQL'],
+    skills: [],
     
     // Education
-    education: [
-      {
-        id: 1,
-        degree: 'Bachelor of Science in Computer Science',
-        institution: 'University of California, Berkeley',
-        year: '2012-2016',
-        gpa: '3.8'
-      }
-    ],
+    education: [],
     
     // Experience
-    experience: [
-      {
-        id: 1,
-        title: 'Senior Frontend Developer',
-        company: 'TechCorp Inc.',
-        startDate: '2022-01',
-        endDate: 'Present',
-        description: 'Lead frontend development for multiple web applications using React and TypeScript. Mentored junior developers and improved code quality standards.'
-      },
-      {
-        id: 2,
-        title: 'Frontend Developer',
-        company: 'StartupXYZ',
-        startDate: '2019-06',
-        endDate: '2021-12',
-        description: 'Developed responsive web applications and collaborated with design team to implement user-friendly interfaces.'
-      }
-    ],
+    experience: [],
     
     // Certifications
-    certifications: [
-      {
-        id: 1,
-        name: 'AWS Certified Developer',
-        issuer: 'Amazon Web Services',
-        date: '2023-03',
-        expiryDate: '2026-03'
-      }
-    ],
+    certifications: [],
     
     // Social Links
     socialLinks: {
-      linkedin: 'https://linkedin.com/in/johndoe',
-      github: 'https://github.com/johndoe',
-      portfolio: 'https://johndoe.dev',
+      linkedin: '',
+      github: '',
+      portfolio: '',
       twitter: ''
     }
   });
 
   const [tempData, setTempData] = useState({ ...profileData });
   const [newSkill, setNewSkill] = useState('');
+
+  // Fetch user profile data on component mount
+  useEffect(() => {
+    if (authUser && !dataLoaded) {
+      loadUserProfile();
+    }
+  }, [authUser, dataLoaded]);
+
+  // Also load when employees data changes
+  useEffect(() => {
+    if (authUser && employees.length > 0 && !dataLoaded) {
+      loadUserProfile();
+    }
+  }, [employees, authUser, dataLoaded]);
+
+  const loadUserProfile = async () => {
+    try {
+      setLoading(true);
+      console.log('🔄 Loading user profile...', { authUser, employeesCount: employees.length });
+
+      // Fetch employees if not already loaded
+      if (employees.length === 0) {
+        console.log('📥 Fetching employees data...');
+        await fetchEmployees();
+      }
+
+      // Find the employee record for current user
+      const userEmployee = employees.find(emp => {
+        const matchByEmail = emp.email === authUser.email;
+        const matchByUserId = emp.userId === authUser.id;
+        console.log('🔍 Searching for employee:', { 
+          userEmail: authUser.email, 
+          userId: authUser.id,
+          employeeEmail: emp.email,
+          employeeUserId: emp.userId,
+          matchByEmail,
+          matchByUserId
+        });
+        return matchByEmail || matchByUserId;
+      });
+
+      console.log('✅ Found employee record:', userEmployee);
+
+      // Load profile data from localStorage or initialize
+      const userProfile = localStorage.getItem(`userProfile_${authUser.id}`);
+      let profileDataToUse;
+
+      if (userProfile) {
+        console.log('📁 Loading from localStorage');
+        profileDataToUse = JSON.parse(userProfile);
+      } else {
+        console.log('🆕 Creating new profile from user data');
+        // Initialize with auth user data and employee data
+        const nameParts = (authUser.name || '').split(' ');
+        profileDataToUse = {
+          ...profileData,
+          firstName: nameParts[0] || '',
+          lastName: nameParts.slice(1).join(' ') || '',
+          email: authUser.email || '',
+          currentCompany: authUser.companyName || userEmployee?.companyName || 'Your Company',
+          salary: userEmployee?.salary || '',
+          currentTitle: userEmployee?.position || 'Employee',
+        };
+      }
+
+      // Always update with latest employee data if available
+      if (userEmployee) {
+        console.log('🔄 Updating with employee data:', userEmployee);
+        profileDataToUse = {
+          ...profileDataToUse,
+          currentCompany: userEmployee.companyName || authUser.companyName || profileDataToUse.currentCompany,
+          salary: userEmployee.salary || profileDataToUse.salary,
+          currentTitle: userEmployee.position || profileDataToUse.currentTitle,
+          email: userEmployee.email || profileDataToUse.email,
+        };
+      } else {
+        console.log('⚠️ No employee record found, using auth data');
+        // Use auth user data if no employee record found
+        profileDataToUse.currentCompany = authUser.companyName || profileDataToUse.currentCompany;
+      }
+
+      console.log('🎯 Final profile data:', profileDataToUse);
+      
+      setProfileData(profileDataToUse);
+      setTempData(profileDataToUse);
+      setDataLoaded(true);
+      
+    } catch (error) {
+      console.error('❌ Error loading user profile:', error);
+      toast({
+        title: "Error loading profile",
+        description: "Failed to load your profile data.",
+        variant: "destructive",
+      });
+      
+      // Set basic data even if there's an error
+      const nameParts = (authUser?.name || '').split(' ');
+      const fallbackData = {
+        ...profileData,
+        firstName: nameParts[0] || '',
+        lastName: nameParts.slice(1).join(' ') || '',
+        email: authUser?.email || '',
+        currentCompany: authUser?.companyName || 'Your Company',
+        currentTitle: 'Employee',
+      };
+      
+      setProfileData(fallbackData);
+      setTempData(fallbackData);
+      setDataLoaded(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const calculateProfileCompletion = () => {
     const fields = [
@@ -122,10 +211,75 @@ const UserProfilePage = () => {
     setIsEditing(true);
   };
 
-  const handleSave = () => {
+// Update the handleSave function in UserProfilePage.jsx
+const handleSave = async () => {
+  try {
+    setLoading(true);
+    
+    // Find employee record
+    const userEmployee = employees.find(emp => 
+      emp.email === authUser.email || emp.userId === authUser.id
+    );
+
+    if (userEmployee) {
+      try {
+        console.log('💾 Updating employee record with profile data');
+        
+        await updateEmployee(userEmployee._id, {
+          // Personal info
+          firstName: tempData.firstName,
+          lastName: tempData.lastName,
+          email: tempData.email,
+          phone: tempData.phone || 'To be updated',
+          bio: tempData.bio,
+          
+          // Professional info - THIS IS KEY!
+          position: tempData.currentTitle, // Maps to employee.position
+          department: tempData.department || tempData.currentTitle || 'General', // Maps to employee.department
+          salary: parseFloat(tempData.salary) || 0, // Maps to employee.salary
+          companyName: tempData.currentCompany, // Maps to employee.companyName
+          
+          // Additional profile data
+          skills: tempData.skills,
+          education: tempData.education,
+          experience: tempData.experience,
+          certifications: tempData.certifications,
+          socialLinks: tempData.socialLinks,
+          yearsExperience: tempData.yearsExperience,
+          industry: tempData.industry,
+          noticePeriod: tempData.noticePeriod,
+        });
+        
+        console.log('✅ Employee record updated successfully');
+      } catch (empError) {
+        console.error('⚠️ Could not update employee record:', empError);
+      }
+    }
+
+    // Save to localStorage
+    localStorage.setItem(`userProfile_${authUser.id}`, JSON.stringify(tempData));
+    
     setProfileData({ ...tempData });
     setIsEditing(false);
-  };
+    
+    // Refresh employees data to see changes
+    await fetchEmployees();
+    
+    toast({
+      title: "Profile Updated",
+      description: "Your profile and employee record have been synchronized.",
+    });
+  } catch (error) {
+    console.error('❌ Error saving profile:', error);
+    toast({
+      title: "Error saving profile",
+      description: error.message || "Failed to update your profile.",
+      variant: "destructive",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleCancel = () => {
     setTempData({ ...profileData });
@@ -201,8 +355,81 @@ const UserProfilePage = () => {
     }));
   };
 
+  const addEducation = () => {
+    const newEdu = {
+      id: Date.now(),
+      degree: '',
+      institution: '',
+      year: '',
+      gpa: ''
+    };
+    setTempData(prev => ({
+      ...prev,
+      education: [...prev.education, newEdu]
+    }));
+  };
+
+  const updateEducation = (id, field, value) => {
+    setTempData(prev => ({
+      ...prev,
+      education: prev.education.map(edu => 
+        edu.id === id ? { ...edu, [field]: value } : edu
+      )
+    }));
+  };
+
+  const removeEducation = (id) => {
+    setTempData(prev => ({
+      ...prev,
+      education: prev.education.filter(edu => edu.id !== id)
+    }));
+  };
+
+  const addCertification = () => {
+    const newCert = {
+      id: Date.now(),
+      name: '',
+      issuer: '',
+      date: '',
+      expiryDate: ''
+    };
+    setTempData(prev => ({
+      ...prev,
+      certifications: [...prev.certifications, newCert]
+    }));
+  };
+
+  const updateCertification = (id, field, value) => {
+    setTempData(prev => ({
+      ...prev,
+      certifications: prev.certifications.map(cert => 
+        cert.id === id ? { ...cert, [field]: value } : cert
+      )
+    }));
+  };
+
+  const removeCertification = (id) => {
+    setTempData(prev => ({
+      ...prev,
+      certifications: prev.certifications.filter(cert => cert.id !== id)
+    }));
+  };
+
   const currentData = isEditing ? tempData : profileData;
   const profileCompletion = calculateProfileCompletion();
+
+  // Show loading only on initial load, not when saving
+  if (loading && !dataLoaded) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-lg">Loading your profile...</p>
+          <p className="text-sm text-gray-600 mt-2">Please wait while we load your data</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -226,19 +453,34 @@ const UserProfilePage = () => {
               </div>
               <div>
                 <h1 className="text-3xl font-bold">
-                  {currentData.firstName} {currentData.lastName}
+                  {currentData.firstName} {currentData.lastName || authUser?.name}
                 </h1>
                 <p className="text-blue-100 text-lg">{currentData.currentTitle}</p>
-                <p className="text-blue-200">{currentData.currentCompany}</p>
+                <div className="flex items-center space-x-2 text-blue-200 mt-1">
+                  <Building2 className="h-4 w-4" />
+                  <span>{currentData.currentCompany}</span>
+                </div>
                 <div className="flex items-center mt-2 space-x-4">
                   <span className="flex items-center text-blue-100">
                     <Mail className="h-4 w-4 mr-1" />
-                    {currentData.email}
+                    {currentData.email || authUser?.email}
                   </span>
-                  <span className="flex items-center text-blue-100">
-                    <Phone className="h-4 w-4 mr-1" />
-                    {currentData.phone}
-                  </span>
+                  {currentData.phone && (
+                    <span className="flex items-center text-blue-100">
+                      <Phone className="h-4 w-4 mr-1" />
+                      {currentData.phone}
+                    </span>
+                  )}
+                  {currentData.salary && (
+                    <span className="flex items-center text-blue-100">
+                      <Briefcase className="h-4 w-4 mr-1" />
+                      {new Intl.NumberFormat('en-NG', {
+                        style: 'currency',
+                        currency: 'NGN',
+                        minimumFractionDigits: 0
+                      }).format(currentData.salary)}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -251,17 +493,32 @@ const UserProfilePage = () => {
                 </div>
               </div>
               {!isEditing ? (
-                <Button onClick={handleEdit} variant="secondary" className="bg-white/20 hover:bg-white/30 text-white border-white/30">
+                <Button 
+                  onClick={handleEdit} 
+                  variant="secondary" 
+                  className="bg-white/20 hover:bg-white/30 text-white border-white/30"
+                  disabled={loading}
+                >
                   <Edit className="h-4 w-4 mr-2" />
                   Edit Profile
                 </Button>
               ) : (
                 <div className="space-x-2">
-                  <Button onClick={handleSave} variant="secondary" className="bg-green-500 hover:bg-green-600 text-white border-green-500">
+                  <Button 
+                    onClick={handleSave} 
+                    variant="secondary" 
+                    className="bg-green-500 hover:bg-green-600 text-white border-green-500"
+                    disabled={loading}
+                  >
                     <Save className="h-4 w-4 mr-2" />
-                    Save
+                    {loading ? 'Saving...' : 'Save'}
                   </Button>
-                  <Button onClick={handleCancel} variant="secondary" className="bg-white/20 hover:bg-white/30 text-white border-white/30">
+                  <Button 
+                    onClick={handleCancel} 
+                    variant="secondary" 
+                    className="bg-white/20 hover:bg-white/30 text-white border-white/30"
+                    disabled={loading}
+                  >
                     <X className="h-4 w-4 mr-2" />
                     Cancel
                   </Button>
@@ -299,8 +556,121 @@ const UserProfilePage = () => {
         })}
       </div>
 
-      {/* Personal Information Tab */}
-      {activeTab === 'personal' && (
+      {/* Professional Information Tab - Updated with Company and Salary */}
+      {activeTab === 'professional' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Professional Information</CardTitle>
+            <CardDescription>Your current role and career preferences</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="currentTitle">Current Job Title</Label>
+                <Input
+                  id="currentTitle"
+                  value={currentData.currentTitle}
+                  onChange={(e) => handleInputChange('currentTitle', e.target.value)}
+                  disabled={!isEditing}
+                  placeholder="e.g., Software Engineer"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="currentCompany">
+                  Company
+                  <span className="text-xs text-gray-500 ml-2">(from your registration)</span>
+                </Label>
+                <div className="flex items-center space-x-2 p-3 bg-gray-50 rounded-md border">
+                  <Building2 className="h-4 w-4 text-gray-500" />
+                  <span className="text-gray-700 font-medium">{currentData.currentCompany}</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Company name is set from your registration and cannot be changed here.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="salary">Monthly Salary (₦)</Label>
+                <Input
+                  id="salary"
+                  type="number"
+                  value={currentData.salary}
+                  onChange={(e) => handleInputChange('salary', e.target.value)}
+                  disabled={!isEditing}
+                  placeholder="e.g., 150000"
+                />
+                <p className="text-xs text-gray-500">
+                  This salary will be used for payroll calculations and shown in employee lists.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="yearsExperience">Years of Experience</Label>
+                <Select
+                  value={currentData.yearsExperience}
+                  onValueChange={(value) => handleInputChange('yearsExperience', value)}
+                  disabled={!isEditing}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select experience" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0-1">0-1 years</SelectItem>
+                    <SelectItem value="2-3">2-3 years</SelectItem>
+                    <SelectItem value="4-5">4-5 years</SelectItem>
+                    <SelectItem value="5-7">5-7 years</SelectItem>
+                    <SelectItem value="8-10">8-10 years</SelectItem>
+                    <SelectItem value="10+">10+ years</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="industry">Industry</Label>
+                <Select
+                  value={currentData.industry}
+                  onValueChange={(value) => handleInputChange('industry', value)}
+                  disabled={!isEditing}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select industry" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Technology">Technology</SelectItem>
+                    <SelectItem value="Finance">Finance</SelectItem>
+                    <SelectItem value="Healthcare">Healthcare</SelectItem>
+                    <SelectItem value="Education">Education</SelectItem>
+                    <SelectItem value="Marketing">Marketing</SelectItem>
+                    <SelectItem value="Consulting">Consulting</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="noticePeriod">Notice Period</Label>
+                <Select
+                  value={currentData.noticePeriod}
+                  onValueChange={(value) => handleInputChange('noticePeriod', value)}
+                  disabled={!isEditing}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select notice period" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="immediate">Immediate</SelectItem>
+                    <SelectItem value="1-week">1 week</SelectItem>
+                    <SelectItem value="2-weeks">2 weeks</SelectItem>
+                    <SelectItem value="1-month">1 month</SelectItem>
+                    <SelectItem value="2-months">2 months</SelectItem>
+                    <SelectItem value="3-months">3 months</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+{/* Personal Information Tab */}
+{activeTab === 'personal' && (
         <Card>
           <CardHeader>
             <CardTitle>Personal Information</CardTitle>
@@ -421,128 +791,6 @@ const UserProfilePage = () => {
                     placeholder="https://twitter.com/username"
                   />
                 </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Professional Information Tab */}
-      {activeTab === 'professional' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Professional Information</CardTitle>
-            <CardDescription>Your current role and career preferences</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="currentTitle">Current Job Title</Label>
-                <Input
-                  id="currentTitle"
-                  value={currentData.currentTitle}
-                  onChange={(e) => handleInputChange('currentTitle', e.target.value)}
-                  disabled={!isEditing}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="currentCompany">Current Company</Label>
-                <Input
-                  id="currentCompany"
-                  value={currentData.currentCompany}
-                  onChange={(e) => handleInputChange('currentCompany', e.target.value)}
-                  disabled={!isEditing}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="yearsExperience">Years of Experience</Label>
-                <Select
-                  value={currentData.yearsExperience}
-                  onValueChange={(value) => handleInputChange('yearsExperience', value)}
-                  disabled={!isEditing}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select experience" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="0-1">0-1 years</SelectItem>
-                    <SelectItem value="2-3">2-3 years</SelectItem>
-                    <SelectItem value="4-5">4-5 years</SelectItem>
-                    <SelectItem value="5-7">5-7 years</SelectItem>
-                    <SelectItem value="8-10">8-10 years</SelectItem>
-                    <SelectItem value="10+">10+ years</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="industry">Industry</Label>
-                <Select
-                  value={currentData.industry}
-                  onValueChange={(value) => handleInputChange('industry', value)}
-                  disabled={!isEditing}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select industry" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Technology">Technology</SelectItem>
-                    <SelectItem value="Finance">Finance</SelectItem>
-                    <SelectItem value="Healthcare">Healthcare</SelectItem>
-                    <SelectItem value="Education">Education</SelectItem>
-                    <SelectItem value="Marketing">Marketing</SelectItem>
-                    <SelectItem value="Consulting">Consulting</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="salaryExpectation">Salary Expectation</Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={currentData.salaryCurrency}
-                    onValueChange={(value) => handleInputChange('salaryCurrency', value)}
-                    disabled={!isEditing}
-                  >
-                    <SelectTrigger className="w-20">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="USD">USD</SelectItem>
-                      <SelectItem value="EUR">EUR</SelectItem>
-                      <SelectItem value="GBP">GBP</SelectItem>
-                      <SelectItem value="NGN">NGN</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    id="salaryExpectation"
-                    value={currentData.salaryExpectation}
-                    onChange={(e) => handleInputChange('salaryExpectation', e.target.value)}
-                    disabled={!isEditing}
-                    placeholder="e.g., 120000"
-                    className="flex-1"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="noticePeriod">Notice Period</Label>
-                <Select
-                  value={currentData.noticePeriod}
-                  onValueChange={(value) => handleInputChange('noticePeriod', value)}
-                  disabled={!isEditing}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select notice period" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="immediate">Immediate</SelectItem>
-                    <SelectItem value="1-week">1 week</SelectItem>
-                    <SelectItem value="2-weeks">2 weeks</SelectItem>
-                    <SelectItem value="1-month">1 month</SelectItem>
-                    <SelectItem value="2-months">2 months</SelectItem>
-                    <SelectItem value="3-months">3 months</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
           </CardContent>
@@ -679,30 +927,72 @@ const UserProfilePage = () => {
       {activeTab === 'education' && (
         <Card>
           <CardHeader>
-            <CardTitle>Education & Certifications</CardTitle>
+            <div className="flex justify-between items-center">
+              <CardTitle>Education & Certifications</CardTitle>
+              {isEditing && (
+                <div className="space-x-2">
+                  <Button onClick={addEducation} variant="outline">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Education
+                  </Button>
+                  <Button onClick={addCertification} variant="outline">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Certification
+                  </Button>
+                </div>
+              )}
+            </div>
             <CardDescription>Your educational background and professional certifications</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div>
               <h3 className="text-lg font-medium mb-4">Education</h3>
-              {currentData.education.map((edu, index) => (
-                <div key={edu.id} className="border rounded-lg p-4 space-y-4">
+              {currentData.education.map((edu) => (
+                <div key={edu.id} className="border rounded-lg p-4 space-y-4 mb-4">
+                  {isEditing && (
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={() => removeEducation(edu.id)}
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Degree</Label>
-                      <Input value={edu.degree} disabled={!isEditing} />
+                      <Input 
+                        value={edu.degree} 
+                        onChange={(e) => updateEducation(edu.id, 'degree', e.target.value)}
+                        disabled={!isEditing} 
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Institution</Label>
-                      <Input value={edu.institution} disabled={!isEditing} />
+                      <Input 
+                        value={edu.institution} 
+                        onChange={(e) => updateEducation(edu.id, 'institution', e.target.value)}
+                        disabled={!isEditing} 
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Year</Label>
-                      <Input value={edu.year} disabled={!isEditing} />
+                      <Input 
+                        value={edu.year} 
+                        onChange={(e) => updateEducation(edu.id, 'year', e.target.value)}
+                        disabled={!isEditing} 
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>GPA</Label>
-                      <Input value={edu.gpa} disabled={!isEditing} />
+                      <Input 
+                        value={edu.gpa} 
+                        onChange={(e) => updateEducation(edu.id, 'gpa', e.target.value)}
+                        disabled={!isEditing} 
+                      />
                     </div>
                   </div>
                 </div>
@@ -711,24 +1001,52 @@ const UserProfilePage = () => {
             
             <div>
               <h3 className="text-lg font-medium mb-4">Certifications</h3>
-              {currentData.certifications.map((cert, index) => (
-                <div key={cert.id} className="border rounded-lg p-4 space-y-4">
+              {currentData.certifications.map((cert) => (
+                <div key={cert.id} className="border rounded-lg p-4 space-y-4 mb-4">
+                  {isEditing && (
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={() => removeCertification(cert.id)}
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Certification Name</Label>
-                      <Input value={cert.name} disabled={!isEditing} />
+                      <Input 
+                        value={cert.name} 
+                        onChange={(e) => updateCertification(cert.id, 'name', e.target.value)}
+                        disabled={!isEditing} 
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Issuing Organization</Label>
-                      <Input value={cert.issuer} disabled={!isEditing} />
+                      <Input 
+                        value={cert.issuer} 
+                        onChange={(e) => updateCertification(cert.id, 'issuer', e.target.value)}
+                        disabled={!isEditing} 
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Issue Date</Label>
-                      <Input value={cert.date} disabled={!isEditing} />
+                      <Input 
+                        value={cert.date} 
+                        onChange={(e) => updateCertification(cert.id, 'date', e.target.value)}
+                        disabled={!isEditing} 
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Expiry Date</Label>
-                      <Input value={cert.expiryDate} disabled={!isEditing} />
+                      <Input 
+                        value={cert.expiryDate} 
+                        onChange={(e) => updateCertification(cert.id, 'expiryDate', e.target.value)}
+                        disabled={!isEditing} 
+                      />
                     </div>
                   </div>
                 </div>
@@ -737,6 +1055,7 @@ const UserProfilePage = () => {
           </CardContent>
         </Card>
       )}
+
     </div>
   );
 };

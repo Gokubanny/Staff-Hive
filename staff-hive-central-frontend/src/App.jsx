@@ -8,7 +8,7 @@ import { AuthProvider, ProtectedRoute } from "@/contexts/AuthContext";
 import { DataProvider } from "@/contexts/DataContext";
 import { JobProvider } from "@/contexts/JobContext";
 import { AttendanceProvider } from "@/contexts/AttendanceContext";
-import { LeaveProvider } from "@/contexts/LeaveContext"; // ✅ Added
+import { LeaveProvider } from "@/contexts/LeaveContext";
 
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { UserLayout } from "@/components/UserLayout";
@@ -65,6 +65,9 @@ import CompanyInfo from "./pages/settings/system/CompanyInfo";
 import DataManagement from "./pages/settings/system/DataManagement";
 import Integrations from "./pages/settings/system/Integrations";
 
+// Pending Users - FIXED IMPORT
+import PendingUsers from './pages/admin/PendingUsers.jsx'; // ✅ Fixed import
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -77,7 +80,7 @@ const App = () => (
           <DataProvider>
             <JobProvider>
               <AttendanceProvider>
-                <LeaveProvider> {/* ✅ Added LeaveProvider */}
+                <LeaveProvider>
                   <Routes>
                     {/* Public routes */}
                     <Route path="/" element={<Landing />} />
@@ -111,9 +114,12 @@ const App = () => (
                       {/* Job Management */}
                       <Route path="post-job" element={<AdminPostJob />} />
                       <Route path="job-postings" element={<AdminAllJob />} />
-                      <Route path="jobs" element={<AdminAllJob />} /> {/* alias */}
+                      <Route path="jobs" element={<AdminAllJob />} />
                       <Route path="jobs/view/:id" element={<AdminViewJob />} />
                       <Route path="jobs/edit/:id" element={<AdminEditJob />} />
+
+                      {/* Pending Users */}
+                      <Route path="pending-users" element={<PendingUsers />} />
 
                       <Route path="knowledge" element={<Knowledge />} />
                       <Route path="reports" element={<Reports />} />

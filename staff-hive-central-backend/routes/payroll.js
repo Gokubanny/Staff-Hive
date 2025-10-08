@@ -1,38 +1,171 @@
-// routes/payroll.js (Fixed version)
-const express = require('express');
+// routes/notifications.js - Notification routes
+import express from 'express';
+import Notification from '../models/Notification.js';
+import { auth } from '../middleware/auth.js';
+
 const router = express.Router();
-const { body } = require('express-validator');
-const { auth } = require('../middleware/auth');
-const payrollController = require('../controllers/payrollController');
 
-// Validation rules
-const payrollValidation = [
-  body('employeeId').isMongoId().withMessage('Valid employee ID is required'),
-  body('employeeName').trim().isLength({ min: 2 }).withMessage('Employee name is required'),
-  body('baseSalary').isNumeric().isFloat({ min: 0 }).withMessage('Base salary must be a positive number'),
-  body('overtime').optional().isNumeric().isFloat({ min: 0 }).withMessage('Overtime must be a positive number'),
-  body('bonuses').optional().isNumeric().isFloat({ min: 0 }).withMessage('Bonuses must be a positive number'),
-  body('deductions').optional().isObject().withMessage('Deductions must be an object'),
-  body('totalAmount').isNumeric().isFloat({ min: 0 }).withMessage('Total amount must be a positive number'),
-  body('period').matches(/^\d{4}-\d{2}$/).withMessage('Period must be in YYYY-MM format'),
-  body('status').optional().isIn(['pending', 'processing', 'completed', 'failed']).withMessage('Invalid status')
-];
+// Get all notifications for current user
+router.get('/', auth, async (req, res) => {
+  try {
+    const { isRead, type, limit = 50 } = req.query;
+    
+    let query = { recipient: req.user.userId };
+    
+    if (isRead !== undefined) {
+      query.isRead = isRead === 'true';
+    }
+    
+    if (type) {
+      query.type = type;
+    }
+    
+    const notifications = await Notification.find(query)
+      .populate('sender', 'name email role')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit));
+    
+    const unreadCount = await Notification.countDocuments({
+      recipient: req.user.userId,
+      isRead: false
+    });
+    
+    res.json({
+      success: true,
+      data: notifications,
+      unreadCount,
+      count: notifications.length
+    });
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch notifications',
+      error: error.message
+    });
+  }
+});
 
-const generatePayrollValidation = [
-  body('employeeIds').isArray({ min: 1 }).withMessage('At least one employee ID is required'),
-  body('employeeIds.*').isMongoId().withMessage('All employee IDs must be valid'),
-  body('period').optional().matches(/^\d{4}-\d{2}$/).withMessage('Period must be in YYYY-MM format')
-];
+// Get unread notification count
+router.get('/unread-count', auth, async (req, res) => {
+  try {
+    const count = await Notification.countDocuments({
+      recipient: req.user.userId,
+      isRead: false
+    });
+    
+    res.json({
+      success: true,
+      count
+    });
+  } catch (error) {
+    console.error('Error fetching unread count:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch unread count'
+    });
+  }
+});
 
-// Routes
-router.get('/', auth, payrollController.getPayrollRecords);
-router.get('/:id', auth, payrollController.getPayrollRecord);
-router.post('/', auth, payrollValidation, payrollController.addPayrollRecord);
-router.post('/generate', auth, generatePayrollValidation, payrollController.generatePayroll);
-router.put('/:id', auth, payrollValidation, payrollController.updatePayrollRecord);
-router.patch('/:id/status', auth, [
-  body('status').isIn(['pending', 'processing', 'completed', 'failed']).withMessage('Invalid status')
-], payrollController.updatePayrollStatus);
-router.delete('/:id', auth, payrollController.deletePayrollRecord);
+// Mark notification as read
+router.patch('/:id/read', auth, async (req, res) => {
+  try {
+    const notification = await Notification.findOne({
+      _id: req.params.id,
+      recipient: req.user.userId
+    });
+    
+    if (!notification) {
+      return res.status(404).json({
+        success: false,
+        message: 'Notification not found'
+      });
+    }
+    
+    await notification.markAsRead();
+    
+    res.json({
+      success: true,
+      message: 'Notification marked as read',
+      data: notification
+    });
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark notification as read'
+    });
+  }
+});
 
-module.exports = router;
+// Mark all notifications as read
+router.patch('/mark-all-read', auth, async (req, res) => {
+  try {
+    await Notification.updateMany(
+      { recipient: req.user.userId, isRead: false },
+      { isRead: true, readAt: new Date() }
+    );
+    
+    res.json({
+      success: true,
+      message: 'All notifications marked as read'
+    });
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark all notifications as read'
+    });
+  }
+});
+
+// Delete notification
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    const notification = await Notification.findOneAndDelete({
+      _id: req.params.id,
+      recipient: req.user.userId
+    });
+    
+    if (!notification) {
+      return res.status(404).json({
+        success: false,
+        message: 'Notification not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Notification deleted'
+    });
+  } catch (error) {
+    console.error('Error deleting notification:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete notification'
+    });
+  }
+});
+
+// Delete all read notifications
+router.delete('/clear-read', auth, async (req, res) => {
+  try {
+    const result = await Notification.deleteMany({
+      recipient: req.user.userId,
+      isRead: true
+    });
+    
+    res.json({
+      success: true,
+      message: `${result.deletedCount} notifications cleared`
+    });
+  } catch (error) {
+    console.error('Error clearing notifications:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to clear notifications'
+    });
+  }
+});
+
+export default router;

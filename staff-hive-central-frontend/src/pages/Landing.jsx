@@ -179,7 +179,7 @@ export default function Landing() {
                 Start Free Trial
               </Link>
             </Button>
-            <Button size="lg" variant="outline" asChild className="text-lg px-8 py-3 border-white text-white hover:bg-white hover:text-blue-600">
+            <Button size="lg" variant="outline" asChild className="text-lg px-8 py-3 border-white text-black hover:bg-white hover:text-blue-600">
               <Link to="/signin">
                 Sign In Now
               </Link>

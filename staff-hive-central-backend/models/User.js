@@ -32,11 +32,40 @@ const userSchema = new mongoose.Schema({
   employeeId: {
     type: String,
     trim: true,
-    sparse: true // Allows null values but ensures uniqueness when present
+    sparse: true
   },
   companyName: {
     type: String,
-    trim: true
+    trim: true,
+    required: [true, 'Company name is required']
+  },
+  // Verification fields
+  isVerified: {
+    type: Boolean,
+    default: function() {
+      return this.role === 'admin';
+    }
+  },
+  verificationStatus: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: function() {
+      return this.role === 'admin' ? 'approved' : 'pending';
+    }
+  },
+  verifiedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  verifiedAt: {
+    type: Date
+  },
+  rejectionReason: {
+    type: String
+  },
+  adminId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   },
   isActive: {
     type: Boolean,
@@ -52,9 +81,12 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index for unique email
+// Indexes
 userSchema.index({ email: 1 }, { unique: true });
 userSchema.index({ employeeId: 1 }, { unique: true, sparse: true });
+userSchema.index({ companyName: 1 });
+userSchema.index({ verificationStatus: 1 });
+userSchema.index({ adminId: 1 });
 
 // Hash password before saving
 userSchema.pre('save', async function(next) {
@@ -74,13 +106,20 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Find by email method
+// Static methods
 userSchema.statics.findByEmail = function(email) {
   return this.findOne({ email: email.toLowerCase().trim() });
 };
 
-// Convert to public JSON (remove sensitive data)
-userSchema.methods.toPublicJSON = function() {
+userSchema.statics.findAdminByCompany = function(companyName) {
+  return this.findOne({ 
+    companyName: companyName.trim(),
+    role: 'admin'
+  });
+};
+
+// Remove password from JSON output
+userSchema.methods.toJSON = function() {
   const userObject = this.toObject();
   delete userObject.password;
   return userObject;

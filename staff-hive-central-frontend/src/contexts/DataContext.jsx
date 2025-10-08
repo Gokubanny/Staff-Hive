@@ -1,5 +1,5 @@
 // src/contexts/DataContext.js
-import { createContext, useContext, useReducer, useEffect } from 'react';
+import { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import { 
   authAPI, 
   employeeAPI, 
@@ -161,150 +161,203 @@ export const DataProvider = ({ children }) => {
     }
   };
 
-  // Authentication
-  const login = async (credentials) =>
-    handleApiCall(
-      () => authAPI.login(credentials),
-      (response) => {
-        const token = response?.data?.token;
-        const user = response?.data?.user;
-        if (token && user) {
-          localStorage.setItem('token', token);
-          dispatch({ type: ACTIONS.SET_USER, payload: user });
-        }
-      }
-    );
-
-  const register = async (userData) =>
-    handleApiCall(
-      () => authAPI.register(userData),
-      (response) => {
-        const token = response?.data?.token;
-        const user = response?.data?.user;
-        if (token && user) {
-          localStorage.setItem('token', token);
-          dispatch({ type: ACTIONS.SET_USER, payload: user });
-        }
-      }
-    );
-
-  const logout = () => {
-    localStorage.removeItem('token');
-    dispatch({ type: ACTIONS.SET_USER, payload: null });
-    dispatch({ type: ACTIONS.SET_EMPLOYEES, payload: [] });
-    dispatch({ type: ACTIONS.SET_COMPANIES, payload: [] });
-    dispatch({ type: ACTIONS.SET_APPLICANTS, payload: [] });
-    dispatch({ type: ACTIONS.SET_JOBS, payload: [] });
-    dispatch({ type: ACTIONS.SET_PAYROLL, payload: [] });
-    dispatch({ type: ACTIONS.SET_ANALYTICS, payload: null });
-  };
-
-  // Employee operations
-  const fetchEmployees = () =>
+  // Employee operations - FIXED: Proper response handling
+  const fetchEmployees = useCallback(() =>
     handleApiCall(
       () => employeeAPI.getAll(),
       (response) => {
-        const data = Array.isArray(response?.data) ? response.data : response?.data?.employees || [];
-        dispatch({ type: ACTIONS.SET_EMPLOYEES, payload: data });
+        console.log('🔍 Employees API Response:', response); // Debug log
+        
+        // Handle different response structures from backend
+        let employeesData = [];
+        
+        if (Array.isArray(response)) {
+          // If response is directly an array
+          employeesData = response;
+        } else if (Array.isArray(response?.data)) {
+          // If response has data array
+          employeesData = response.data;
+        } else if (Array.isArray(response?.data?.employees)) {
+          // If response has data.employees array
+          employeesData = response.data.employees;
+        } else if (response?.data && typeof response.data === 'object') {
+          // If response.data is an object, convert to array
+          employeesData = Object.values(response.data);
+        } else {
+          console.warn('⚠️ Unexpected employees response structure:', response);
+          employeesData = [];
+        }
+
+        console.log('✅ Processed employees data:', employeesData);
+        
+        // Ensure all employees have proper structure
+        const processedEmployees = employeesData.map(emp => {
+          // Create proper name from firstName + lastName if name doesn't exist
+          const name = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || 'Unknown Employee';
+          
+          return {
+            _id: emp._id || emp.id,
+            name: name,
+            firstName: emp.firstName,
+            lastName: emp.lastName,
+            email: emp.email,
+            position: emp.position || emp.jobTitle || 'No Position',
+            salary: emp.salary || emp.baseSalary || emp.monthlySalary || 0,
+            employeeId: emp.employeeId || emp.empId,
+            department: emp.department,
+            status: emp.status,
+            ...emp // Include all other properties
+          };
+        });
+
+        dispatch({ type: ACTIONS.SET_EMPLOYEES, payload: processedEmployees });
+      },
+      (error) => {
+        console.error('❌ Failed to fetch employees:', error);
+        dispatch({ type: ACTIONS.SET_EMPLOYEES, payload: [] });
       }
-    );
+    ), []);
 
-  const addEmployee = (data) =>
-    handleApiCall(() => employeeAPI.create(data), (res) => dispatch({ type: ACTIONS.ADD_EMPLOYEE, payload: res?.data }));
+  const addEmployee = useCallback((data) =>
+    handleApiCall(() => employeeAPI.create(data), (res) => {
+      const newEmployee = res?.data || res;
+      dispatch({ type: ACTIONS.ADD_EMPLOYEE, payload: newEmployee });
+    }), []);
 
-  const updateEmployee = (id, data) =>
-    handleApiCall(() => employeeAPI.update(id, data), (res) => dispatch({ type: ACTIONS.UPDATE_EMPLOYEE, payload: res?.data }));
+  const updateEmployee = useCallback((id, data) =>
+    handleApiCall(() => employeeAPI.update(id, data), (res) => {
+      const updatedEmployee = res?.data || res;
+      dispatch({ type: ACTIONS.UPDATE_EMPLOYEE, payload: updatedEmployee });
+    }), []);
 
-  const deleteEmployee = (id) =>
-    handleApiCall(() => employeeAPI.delete(id), () => dispatch({ type: ACTIONS.DELETE_EMPLOYEE, payload: id }));
+  const deleteEmployee = useCallback((id) =>
+    handleApiCall(() => employeeAPI.delete(id), () => dispatch({ type: ACTIONS.DELETE_EMPLOYEE, payload: id })), []);
 
   // Company operations
-  const fetchCompanies = () =>
-    handleApiCall(() => companyAPI.getAll(), (res) => dispatch({ type: ACTIONS.SET_COMPANIES, payload: res?.data || [] }));
+  const fetchCompanies = useCallback(() =>
+    handleApiCall(() => companyAPI.getAll(), (res) => {
+      const companiesData = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : res?.data?.companies || [];
+      dispatch({ type: ACTIONS.SET_COMPANIES, payload: companiesData });
+    }), []);
 
-  const addCompany = (data) =>
-    handleApiCall(() => companyAPI.create(data), (res) => dispatch({ type: ACTIONS.ADD_COMPANY, payload: res?.data }));
+  const addCompany = useCallback((data) =>
+    handleApiCall(() => companyAPI.create(data), (res) => {
+      const newCompany = res?.data || res;
+      dispatch({ type: ACTIONS.ADD_COMPANY, payload: newCompany });
+    }), []);
 
-  const updateCompany = (id, data) =>
-    handleApiCall(() => companyAPI.update(id, data), (res) => dispatch({ type: ACTIONS.UPDATE_COMPANY, payload: res?.data }));
+  const updateCompany = useCallback((id, data) =>
+    handleApiCall(() => companyAPI.update(id, data), (res) => {
+      const updatedCompany = res?.data || res;
+      dispatch({ type: ACTIONS.UPDATE_COMPANY, payload: updatedCompany });
+    }), []);
 
-  const deleteCompany = (id) =>
-    handleApiCall(() => companyAPI.delete(id), () => dispatch({ type: ACTIONS.DELETE_COMPANY, payload: id }));
+  const deleteCompany = useCallback((id) =>
+    handleApiCall(() => companyAPI.delete(id), () => dispatch({ type: ACTIONS.DELETE_COMPANY, payload: id })), []);
 
   // Applicant operations
-  const fetchApplicants = () =>
-    handleApiCall(() => applicantAPI.getAll(), (res) => dispatch({ type: ACTIONS.SET_APPLICANTS, payload: res?.data || [] }));
+  const fetchApplicants = useCallback(() =>
+    handleApiCall(() => applicantAPI.getAll(), (res) => {
+      const applicantsData = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : res?.data?.applicants || [];
+      dispatch({ type: ACTIONS.SET_APPLICANTS, payload: applicantsData });
+    }), []);
 
-  const addApplicant = (data) =>
-    handleApiCall(() => applicantAPI.create(data), (res) => dispatch({ type: ACTIONS.ADD_APPLICANT, payload: res?.data }));
+  const addApplicant = useCallback((data) =>
+    handleApiCall(() => applicantAPI.create(data), (res) => {
+      const newApplicant = res?.data || res;
+      dispatch({ type: ACTIONS.ADD_APPLICANT, payload: newApplicant });
+    }), []);
 
-  const updateApplicant = (id, data) =>
-    handleApiCall(() => applicantAPI.update(id, data), (res) => dispatch({ type: ACTIONS.UPDATE_APPLICANT, payload: res?.data }));
+  const updateApplicant = useCallback((id, data) =>
+    handleApiCall(() => applicantAPI.update(id, data), (res) => {
+      const updatedApplicant = res?.data || res;
+      dispatch({ type: ACTIONS.UPDATE_APPLICANT, payload: updatedApplicant });
+    }), []);
 
-  const updateApplicantStage = (id, stage) =>
-    handleApiCall(() => applicantAPI.updateStage(id, stage), (res) => dispatch({ type: ACTIONS.UPDATE_APPLICANT, payload: res?.data }));
+  const updateApplicantStage = useCallback((id, stage) =>
+    handleApiCall(() => applicantAPI.updateStage(id, stage), (res) => {
+      const updatedApplicant = res?.data || res;
+      dispatch({ type: ACTIONS.UPDATE_APPLICANT, payload: updatedApplicant });
+    }), []);
 
-  const deleteApplicant = (id) =>
-    handleApiCall(() => applicantAPI.delete(id), () => dispatch({ type: ACTIONS.DELETE_APPLICANT, payload: id }));
+  const deleteApplicant = useCallback((id) =>
+    handleApiCall(() => applicantAPI.delete(id), () => dispatch({ type: ACTIONS.DELETE_APPLICANT, payload: id })), []);
 
   // Job operations
-  const fetchJobs = () =>
-    handleApiCall(() => jobAPI.getAll(), (res) => dispatch({ type: ACTIONS.SET_JOBS, payload: res?.data || [] }));
+  const fetchJobs = useCallback(() =>
+    handleApiCall(() => jobAPI.getAll(), (res) => {
+      const jobsData = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : res?.data?.jobs || [];
+      dispatch({ type: ACTIONS.SET_JOBS, payload: jobsData });
+    }), []);
 
-  const addJob = (data) =>
-    handleApiCall(() => jobAPI.create(data), (res) => dispatch({ type: ACTIONS.ADD_JOB, payload: res?.data }));
+  const addJob = useCallback((data) =>
+    handleApiCall(() => jobAPI.create(data), (res) => {
+      const newJob = res?.data || res;
+      dispatch({ type: ACTIONS.ADD_JOB, payload: newJob });
+    }), []);
 
-  const updateJob = (id, data) =>
-    handleApiCall(() => jobAPI.update(id, data), (res) => dispatch({ type: ACTIONS.UPDATE_JOB, payload: res?.data }));
+  const updateJob = useCallback((id, data) =>
+    handleApiCall(() => jobAPI.update(id, data), (res) => {
+      const updatedJob = res?.data || res;
+      dispatch({ type: ACTIONS.UPDATE_JOB, payload: updatedJob });
+    }), []);
 
-  const deleteJob = (id) =>
-    handleApiCall(() => jobAPI.delete(id), () => dispatch({ type: ACTIONS.DELETE_JOB, payload: id }));
+  const deleteJob = useCallback((id) =>
+    handleApiCall(() => jobAPI.delete(id), () => dispatch({ type: ACTIONS.DELETE_JOB, payload: id })), []);
 
   // Payroll operations
-  const fetchPayroll = () =>
-    handleApiCall(() => payrollAPI.getAll(), (res) => dispatch({ type: ACTIONS.SET_PAYROLL, payload: res?.data || [] }));
+  const fetchPayroll = useCallback(() =>
+    handleApiCall(() => payrollAPI.getAll(), (res) => {
+      const payrollData = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : res?.data?.payroll || [];
+      dispatch({ type: ACTIONS.SET_PAYROLL, payload: payrollData });
+    }), []);
 
-  const addPayrollRecord = (data) =>
-    handleApiCall(() => payrollAPI.create(data), (res) => dispatch({ type: ACTIONS.ADD_PAYROLL, payload: res?.data }));
+  const addPayrollRecord = useCallback((data) =>
+    handleApiCall(() => payrollAPI.create(data), (res) => {
+      const newPayroll = res?.data || res;
+      dispatch({ type: ACTIONS.ADD_PAYROLL, payload: newPayroll });
+    }), []);
 
-  const generatePayroll = (employeeIds, period) =>
-    handleApiCall(() => payrollAPI.generate(employeeIds, period), () => fetchPayroll());
+  const generatePayroll = useCallback((employeeIds, period) =>
+    handleApiCall(() => payrollAPI.generate(employeeIds, period), () => fetchPayroll()), [fetchPayroll]);
 
   // Analytics
-  const fetchAnalytics = () =>
-    handleApiCall(() => analyticsAPI.getDashboard(), (res) => dispatch({ type: ACTIONS.SET_ANALYTICS, payload: res?.data }));
+  const fetchAnalytics = useCallback(() =>
+    handleApiCall(() => analyticsAPI.getDashboard(), (res) => {
+      const analyticsData = res?.data || res;
+      dispatch({ type: ACTIONS.SET_ANALYTICS, payload: analyticsData });
+    }), []);
 
   // Load initial data when user exists
   useEffect(() => {
-    if (state.user) {
-      fetchEmployees();
-      fetchCompanies();
-      fetchApplicants();
-      fetchJobs();
-      fetchPayroll();
-      fetchAnalytics();
-    }
-  }, [state.user]);
-
-  // Check existing token
-  useEffect(() => {
     const token = localStorage.getItem('token');
-    if (token) {
-      handleApiCall(
-        () => authAPI.getCurrentUser(),
-        (res) => dispatch({ type: ACTIONS.SET_USER, payload: res?.data?.user || null }),
-        () => localStorage.removeItem('token')
-      );
+    if (token && state.user) {
+      console.log('🔄 Loading initial data for user:', state.user.name);
+      
+      const loadData = async () => {
+        try {
+          await Promise.allSettled([
+            fetchEmployees(),
+            fetchCompanies(),
+            fetchApplicants(),
+            fetchJobs(),
+            fetchPayroll(),
+            fetchAnalytics()
+          ]);
+          console.log('✅ All initial data loaded successfully');
+        } catch (error) {
+          console.error('❌ Error loading initial data:', error);
+        }
+      };
+
+      loadData();
     }
-  }, []);
+  }, [state.user, fetchEmployees, fetchCompanies, fetchApplicants, fetchJobs, fetchPayroll, fetchAnalytics]);
 
   return (
     <DataContext.Provider
       value={{
         ...state,
-        login,
-        register,
-        logout,
         fetchEmployees,
         addEmployee,
         updateEmployee,

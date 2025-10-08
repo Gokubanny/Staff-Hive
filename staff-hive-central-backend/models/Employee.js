@@ -1,4 +1,4 @@
-// models/Employee.js - Employee model for when users sign in as employees
+// models/Employee.js - Add companyName field
 const mongoose = require('mongoose');
 
 const employeeSchema = new mongoose.Schema({
@@ -57,6 +57,10 @@ const employeeSchema = new mongoose.Schema({
     required: [true, 'Department is required'],
     trim: true
   },
+  companyName: {
+    type: String,
+    trim: true
+  },
   startDate: {
     type: Date,
     required: [true, 'Start date is required']
@@ -80,6 +84,41 @@ const employeeSchema = new mongoose.Schema({
     default: 'Active'
   },
   
+  // Additional fields from user profile
+  bio: String,
+  skills: [String],
+  education: [{
+    id: Number,
+    degree: String,
+    institution: String,
+    year: String,
+    gpa: String
+  }],
+  experience: [{
+    id: Number,
+    title: String,
+    company: String,
+    startDate: String,
+    endDate: String,
+    description: String
+  }],
+  certifications: [{
+    id: Number,
+    name: String,
+    issuer: String,
+    date: String,
+    expiryDate: String
+  }],
+  socialLinks: {
+    linkedin: String,
+    github: String,
+    portfolio: String,
+    twitter: String
+  },
+  yearsExperience: String,
+  industry: String,
+  noticePeriod: String,
+  
   // Address
   address: {
     street: { type: String, required: true },
@@ -98,8 +137,7 @@ const employeeSchema = new mongoose.Schema({
   // References
   companyId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Company',
-    required: true
+    ref: 'Company'
   },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -118,7 +156,7 @@ const employeeSchema = new mongoose.Schema({
 // Create indexes
 employeeSchema.index({ email: 1 }, { unique: true });
 employeeSchema.index({ employeeId: 1 }, { unique: true });
-employeeSchema.index({ companyId: 1 });
 employeeSchema.index({ userId: 1 });
+employeeSchema.index({ createdBy: 1 });
 
 module.exports = mongoose.model('Employee', employeeSchema);

@@ -1,4 +1,4 @@
-// src/pages/SignUp.jsx
+// src/pages/SignUp.jsx - Updated with verification flow
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { Eye, EyeOff, Building2, User, Lock, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Building2, User, Lock, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 
 export default function SignUp() {
   const [accountType, setAccountType] = useState('user');
@@ -23,6 +24,7 @@ export default function SignUp() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [pendingVerification, setPendingVerification] = useState(false);
 
   const { signup } = useAuth();
   const navigate = useNavigate();
@@ -37,26 +39,29 @@ export default function SignUp() {
   const validateForm = () => {
     const newErrors = {};
     if (!formData.name.trim()) newErrors.name = 'Name is required';
-    else if (formData.name.trim().length < 2) newErrors.name = 'Name must be at least 2 characters long';
+    else if (formData.name.trim().length < 2) newErrors.name = 'Name must be at least 2 characters';
     else if (!/^[a-zA-Z\s]+$/.test(formData.name.trim())) newErrors.name = 'Name can only contain letters and spaces';
 
     if (!formData.email) newErrors.email = 'Email is required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = 'Please enter a valid email address';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = 'Please enter a valid email';
 
     if (!formData.password) newErrors.password = 'Password is required';
-    else if (formData.password.length < 6) newErrors.password = 'Password must be at least 6 characters long';
+    else if (formData.password.length < 6) newErrors.password = 'Password must be at least 6 characters';
     else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password))
-      newErrors.password = 'Password must contain at least one uppercase letter, one lowercase letter, and one number';
+      newErrors.password = 'Password must contain uppercase, lowercase, and number';
 
-    if (!formData.confirmPassword) newErrors.confirmPassword = 'Please confirm your password';
+    if (!formData.confirmPassword) newErrors.confirmPassword = 'Please confirm password';
     else if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = 'Passwords do not match';
 
     if (accountType === 'user') {
       if (!formData.employeeId.trim()) newErrors.employeeId = 'Employee ID is required';
-      else if (formData.employeeId.trim().length < 3) newErrors.employeeId = 'Employee ID must be at least 3 characters long';
+      else if (formData.employeeId.trim().length < 3) newErrors.employeeId = 'Employee ID must be at least 3 characters';
+      
+      if (!formData.companyName.trim()) newErrors.companyName = 'Company name is required';
+      else if (formData.companyName.trim().length < 2) newErrors.companyName = 'Company name must be at least 2 characters';
     } else if (accountType === 'admin') {
       if (!formData.companyName.trim()) newErrors.companyName = 'Company name is required';
-      else if (formData.companyName.trim().length < 2) newErrors.companyName = 'Company name must be at least 2 characters long';
+      else if (formData.companyName.trim().length < 2) newErrors.companyName = 'Company name must be at least 2 characters';
     }
 
     setErrors(newErrors);
@@ -66,6 +71,8 @@ export default function SignUp() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrors({});
+    setPendingVerification(false);
+    
     if (!validateForm()) return;
 
     setIsLoading(true);
@@ -77,20 +84,25 @@ export default function SignUp() {
         password: formData.password,
         role: accountType,
         ...(accountType === 'user' && { employeeId: formData.employeeId.trim() }),
-        ...(accountType === 'admin' && { companyName: formData.companyName.trim() })
+        companyName: formData.companyName.trim()
       };
 
       const result = await signup(signupData);
 
-      if (result.success && result.user) {
-        toast({ title: "Account created!", description: `Welcome, ${result.user.name}` });
-
-        // redirect based on API returned role
-        const redirectPath = result.user.role.toLowerCase() === 'admin' ? '/dashboard' : '/user-dashboard';
-        navigate(redirectPath, { replace: true });
+      if (result.success) {
+        if (result.requiresVerification || result.user?.verificationStatus === 'pending') {
+          setPendingVerification(true);
+          toast({ 
+            title: "Registration Submitted!", 
+            description: "Your account is pending admin approval." 
+          });
+        } else {
+          toast({ title: "Account created!", description: `Welcome, ${result.user.name}` });
+          const redirectPath = result.user.role === 'admin' ? '/dashboard' : '/user-dashboard';
+          navigate(redirectPath, { replace: true });
+        }
       } else {
-        // handle different API errors
-        const errorLower = result.error.toLowerCase();
+        const errorLower = (result.error || '').toLowerCase();
         if (errorLower.includes('email')) setErrors({ email: result.error });
         else if (errorLower.includes('employee id')) setErrors({ employeeId: result.error });
         else if (errorLower.includes('company')) setErrors({ companyName: result.error });
@@ -107,52 +119,71 @@ export default function SignUp() {
   const handleAccountTypeChange = (type) => {
     setAccountType(type);
     setErrors({});
+    setPendingVerification(false);
     setFormData(prev => ({
       ...prev,
       employeeId: type === 'user' ? prev.employeeId : '',
-      companyName: type === 'admin' ? prev.companyName : ''
+      companyName: prev.companyName
     }));
   };
 
-  const renderUserForm = () => (
-    <div className="space-y-2">
-      <Label htmlFor="employeeId">Employee ID</Label>
-      <Input
-        id="employeeId"
-        name="employeeId"
-        placeholder="Enter your employee ID"
-        value={formData.employeeId}
-        onChange={handleChange}
-        className={errors.employeeId ? 'border-destructive focus:border-destructive' : ''}
-        disabled={isLoading}
-      />
-      {errors.employeeId && (
-        <div className="flex items-center gap-1 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4" /> {errors.employeeId}
-        </div>
-      )}
-    </div>
-  );
+  if (pendingVerification) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-primary-glow/10 p-4">
+        <Card className="w-full max-w-md shadow-elevated border-0">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
+              <Clock className="w-8 h-8 text-yellow-600" />
+            </div>
+            <CardTitle className="text-2xl">Pending Verification</CardTitle>
+            <CardDescription>Your registration is under review</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <Alert className="border-yellow-200 bg-yellow-50">
+              <CheckCircle className="h-4 w-4 text-yellow-600" />
+              <AlertTitle>Registration Submitted Successfully</AlertTitle>
+              <AlertDescription>
+                Your account requires approval from your company administrator.
+                You will receive notification once approved.
+              </AlertDescription>
+            </Alert>
 
-  const renderAdminForm = () => (
-    <div className="space-y-2">
-      <Label htmlFor="companyName">Company Name</Label>
-      <Input
-        id="companyName"
-        name="companyName"
-        placeholder="Enter your company name"
-        value={formData.companyName}
-        onChange={handleChange}
-        className={errors.companyName ? 'border-destructive focus:border-destructive' : ''}
-        disabled={isLoading}
-      />
-      {errors.companyName && (
-        <div className="flex items-center gap-1 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4" /> {errors.companyName}
-        </div>
-      )}
-    </div>
-  );
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p className="font-semibold text-foreground">What happens next?</p>
+              <ul className="list-disc list-inside space-y-2 ml-2">
+                <li>Your company admin will review your registration</li>
+                <li>You'll receive notification once approved</li>
+                <li>After approval, you can sign in with your credentials</li>
+              </ul>
+            </div>
+
+            <div className="pt-4 flex flex-col gap-3">
+              <Button onClick={() => navigate('/signin')} className="w-full">
+                Go to Sign In
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPendingVerification(false);
+                  setFormData({
+                    name: '',
+                    email: '',
+                    password: '',
+                    confirmPassword: '',
+                    companyName: '',
+                    employeeId: ''
+                  });
+                }}
+                className="w-full"
+              >
+                Register Another Account
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-primary-glow/10 p-4">
@@ -164,6 +195,7 @@ export default function SignUp() {
           <h1 className="text-3xl font-bold text-foreground">Create Account</h1>
           <p className="text-muted-foreground mt-2">Join our HR Management platform</p>
         </div>
+
         <Card className="shadow-elevated border-0">
           <CardHeader>
             <CardTitle>Sign Up</CardTitle>
@@ -191,8 +223,16 @@ export default function SignUp() {
               </Button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-              {/* Name */}
+            {accountType === 'user' && (
+              <Alert className="mb-4 border-blue-200 bg-blue-50">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-sm text-blue-800">
+                  User accounts require admin approval. Enter the exact company name registered by your admin.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>
                 <Input
@@ -201,7 +241,7 @@ export default function SignUp() {
                   placeholder="Enter your full name"
                   value={formData.name}
                   onChange={handleChange}
-                  className={errors.name ? 'border-destructive focus:border-destructive' : ''}
+                  className={errors.name ? 'border-destructive' : ''}
                   disabled={isLoading}
                 />
                 {errors.name && (
@@ -211,7 +251,6 @@ export default function SignUp() {
                 )}
               </div>
 
-              {/* Email */}
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -221,7 +260,7 @@ export default function SignUp() {
                   placeholder="Enter your email"
                   value={formData.email}
                   onChange={handleChange}
-                  className={errors.email ? 'border-destructive focus:border-destructive' : ''}
+                  className={errors.email ? 'border-destructive' : ''}
                   disabled={isLoading}
                 />
                 {errors.email && (
@@ -231,9 +270,44 @@ export default function SignUp() {
                 )}
               </div>
 
-              {accountType === 'user' ? renderUserForm() : renderAdminForm()}
+              <div className="space-y-2">
+                <Label htmlFor="companyName">Company Name</Label>
+                <Input
+                  id="companyName"
+                  name="companyName"
+                  placeholder={accountType === 'admin' ? 'Enter company name' : 'Enter exact company name'}
+                  value={formData.companyName}
+                  onChange={handleChange}
+                  className={errors.companyName ? 'border-destructive' : ''}
+                  disabled={isLoading}
+                />
+                {errors.companyName && (
+                  <div className="flex items-center gap-1 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4" /> {errors.companyName}
+                  </div>
+                )}
+              </div>
 
-              {/* Password */}
+              {accountType === 'user' && (
+                <div className="space-y-2">
+                  <Label htmlFor="employeeId">Employee ID</Label>
+                  <Input
+                    id="employeeId"
+                    name="employeeId"
+                    placeholder="Enter your employee ID"
+                    value={formData.employeeId}
+                    onChange={handleChange}
+                    className={errors.employeeId ? 'border-destructive' : ''}
+                    disabled={isLoading}
+                  />
+                  {errors.employeeId && (
+                    <div className="flex items-center gap-1 text-sm text-destructive">
+                      <AlertCircle className="h-4 w-4" /> {errors.employeeId}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
@@ -241,26 +315,30 @@ export default function SignUp() {
                     id="password"
                     name="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Create a password"
+                    placeholder="Create password"
                     value={formData.password}
                     onChange={handleChange}
-                    className={errors.password ? 'border-destructive focus:border-destructive' : ''}
+                    className={errors.password ? 'border-destructive' : ''}
                     disabled={isLoading}
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
                     onClick={() => setShowPassword(!showPassword)}
                     disabled={isLoading}
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4 text-muted-foreground" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
+                {errors.password && (
+                  <div className="flex items-center gap-1 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4" /> {errors.password}
+                  </div>
+                )}
               </div>
 
-              {/* Confirm Password */}
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirm Password</Label>
                 <div className="relative">
@@ -268,23 +346,28 @@ export default function SignUp() {
                     id="confirmPassword"
                     name="confirmPassword"
                     type={showConfirmPassword ? 'text' : 'password'}
-                    placeholder="Confirm your password"
+                    placeholder="Confirm password"
                     value={formData.confirmPassword}
                     onChange={handleChange}
-                    className={errors.confirmPassword ? 'border-destructive focus:border-destructive' : ''}
+                    className={errors.confirmPassword ? 'border-destructive' : ''}
                     disabled={isLoading}
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     disabled={isLoading}
                   >
-                    {showConfirmPassword ? <EyeOff className="h-4 w-4 text-muted-foreground" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
+                {errors.confirmPassword && (
+                  <div className="flex items-center gap-1 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4" /> {errors.confirmPassword}
+                  </div>
+                )}
               </div>
 
               <Button type="submit" className="w-full" disabled={isLoading}>

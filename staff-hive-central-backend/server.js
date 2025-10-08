@@ -18,51 +18,27 @@ import attendanceRoutes from './routes/attendance.js';
 import leaveRoutes from './routes/leave.js';
 import eventsRoutes from './routes/events.js';
 import notificationsRoutes from './routes/notifications.js';
-
-// Auth middleware
 import { auth } from './middleware/auth.js';
 
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ---------------------
-// Security & logging
-// ---------------------
-app.use(
-  helmet({
-    crossOriginEmbedderPolicy: false,
-    contentSecurityPolicy: false, // disable for dev
-  })
-);
+app.use(helmet({ crossOriginEmbedderPolicy: false, contentSecurityPolicy: false }));
+app.use(process.env.NODE_ENV === 'development' ? morgan('dev') : morgan('combined'));
 
-if (process.env.NODE_ENV === 'development') {
-  app.use(morgan('dev'));
-} else {
-  app.use(morgan('combined'));
-}
+// CORS - allow multiple origins
+app.use(cors({
+  origin: ['http://localhost:8080', 'http://localhost:3000', 'http://localhost:5173'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+}));
 
-// ---------------------
-// CORS - must be BEFORE rate limiting
-// ---------------------
-app.use(
-  cors({
-    origin: 'http://localhost:8080', // React frontend
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  })
-);
-
-// ---------------------
-// Body parser
-// ---------------------
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ---------------------
-// MongoDB connection
-// ---------------------
+// MongoDB
 const connectDB = async () => {
   try {
     const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/staff-hive-central';
@@ -75,21 +51,16 @@ const connectDB = async () => {
 };
 connectDB();
 
-// ---------------------
-// Rate Limiters
-// ---------------------
-// Only for sensitive routes (auth)
+// Rate Limiter
 const authLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 50, // auth attempts
-  message: { success: false, message: 'Too many authentication attempts, try again later.' },
+  windowMs: 60 * 1000,
+  max: 50,
+  message: { success: false, message: 'Too many attempts, try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// ---------------------
 // Routes
-// ---------------------
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/companies', companyRoutes);
@@ -101,9 +72,6 @@ app.use('/api/leave', leaveRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 
-// ---------------------
-// Health check
-// ---------------------
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
@@ -114,14 +82,8 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// ---------------------
-// Root
-// ---------------------
 app.get('/', (req, res) => res.json({ success: true, message: 'Welcome to Staff Hive Central API!' }));
 
-// ---------------------
-// Global error handler
-// ---------------------
 app.use((err, req, res, next) => {
   console.error('❌ Error:', err.stack);
   if (err.message === 'Not allowed by CORS') {
@@ -130,10 +92,7 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ success: false, message: err.message || 'Internal server error' });
 });
 
-// ---------------------
-// Start server
-// ---------------------
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`🔗 Frontend allowed origin: http://localhost:8080`);
+  console.log(`🔗 Frontend allowed origins: http://localhost:8080, http://localhost:3000, http://localhost:5173`);
 });

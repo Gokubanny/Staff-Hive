@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { Plus, Edit, Trash2, Search, Users } from "lucide-react"; // ✅ Added Users
+import { Plus, Edit, Trash2, Search, Users, RefreshCw, Building2, Eye } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import AddEmployee from "../components/AddEmployee";
+import EmployeeDetailView from "../components/EmployeeDetailView";
 
 import {
   Table,
@@ -22,12 +23,14 @@ export default function Employees() {
   const { toast } = useToast();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
+  const [viewingEmployee, setViewingEmployee] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchEmployees();
-  }, []);
+  }, [fetchEmployees]);
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-NG', {
@@ -37,12 +40,31 @@ export default function Employees() {
     }).format(amount || 0);
   };
 
-  const filteredEmployees = employees.filter(employee =>
-    employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    employee.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    employee.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    employee.department.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Helper function to get full name
+  const getFullName = (employee) => {
+    return `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || employee.name || 'Unknown Employee';
+  };
+
+  // Get display value with fallbacks
+  const getDisplayValue = (value, fallback = 'Not set') => {
+    return value && value !== '' ? value : fallback;
+  };
+
+  // Fixed filter with null/undefined checks
+  const filteredEmployees = employees.filter(employee => {
+    const fullName = getFullName(employee).toLowerCase();
+    const email = (employee.email || '').toLowerCase();
+    const position = (employee.position || '').toLowerCase();
+    const department = (employee.department || '').toLowerCase();
+    const companyName = (employee.companyName || '').toLowerCase();
+    const searchLower = searchTerm.toLowerCase();
+
+    return fullName.includes(searchLower) ||
+           email.includes(searchLower) ||
+           position.includes(searchLower) ||
+           department.includes(searchLower) ||
+           companyName.includes(searchLower);
+  });
 
   const handleDelete = async (id, name) => {
     if (window.confirm(`Are you sure you want to delete ${name}?`)) {
@@ -67,13 +89,55 @@ export default function Employees() {
     setIsAddDialogOpen(true);
   };
 
+  const handleView = (employee) => {
+    console.log('👁️ Viewing employee:', employee);
+    setViewingEmployee(employee);
+  };
+
   const handleCloseDialog = () => {
     setIsAddDialogOpen(false);
     setEditingEmployee(null);
+    // Refresh data after closing dialog to get any updates
+    fetchEmployees();
   };
 
-  if (loading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  const handleRefresh = async () => {
+    try {
+      setRefreshing(true);
+      await fetchEmployees();
+      toast({
+        title: "Refreshed",
+        description: "Employee data has been updated.",
+      });
+    } catch (error) {
+      toast({
+        title: "Refresh failed",
+        description: "Could not refresh employee data.",
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Debug: Log employee data to see what's being displayed
+  useEffect(() => {
+    if (employees.length > 0) {
+      console.log('📊 Current employees data structure:', employees.map(emp => ({
+        id: emp._id,
+        name: getFullName(emp),
+        email: emp.email,
+        position: emp.position,
+        department: emp.department,
+        companyName: emp.companyName,
+        salary: emp.salary,
+        status: emp.status
+      })));
+    }
+  }, [employees]);
+
+  if (loading && employees.length === 0) {
+    return <div className="flex items-center justify-center min-h-screen">Loading employees...</div>;
   }
 
   return (
@@ -85,32 +149,53 @@ export default function Employees() {
             <p>Search and filter employees across all companies</p>
           </div>
           
-          <Button
-            onClick={() => setIsAddDialogOpen(true)}
-            style={{
-              background:
-                "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)))", 
-              display: 'flex'
-            }}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add Employee
-          </Button>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="flex items-center"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </Button>
+            <Button
+              onClick={() => setIsAddDialogOpen(true)}
+              style={{
+                background:
+                  "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)))", 
+                display: 'flex'
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add Employee
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="flex items-center space-x-2 mb-4">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search employees..."
+              placeholder="Search employees by name, email, position, department, or company..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="max-w-sm"
             />
           </div>
 
+          {/* Data Summary */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-sm text-gray-600">
+              Showing {filteredEmployees.length} of {employees.length} employees
+            </div>
+            <div className="text-sm text-gray-600">
+              Last updated: {new Date().toLocaleTimeString()}
+            </div>
+          </div>
+
           {employees.length === 0 ? (
             <div className="text-center py-8">
-              <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" /> {/* ✅ Now works */}
+              <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No employees yet</h3>
               <p className="text-gray-600 mb-4">Start by adding your first employee</p>
               <Button onClick={() => setIsAddDialogOpen(true)}>
@@ -127,28 +212,54 @@ export default function Employees() {
                     <TableHead>Email</TableHead>
                     <TableHead>Position</TableHead>
                     <TableHead>Department</TableHead>
-                    <TableHead>Salary</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Monthly Salary</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredEmployees.map((emp) => (
-                    <TableRow key={emp._id}>
-                      <TableCell className="font-medium">{emp.name}</TableCell>
-                      <TableCell>{emp.email}</TableCell>
-                      <TableCell>{emp.position}</TableCell>
-                      <TableCell>{emp.department}</TableCell>
+                    <TableRow key={emp._id} className="hover:bg-gray-50">
+                      <TableCell className="font-medium">
+                        <div>
+                          <div>{getFullName(emp)}</div>
+                          {emp.userId && (
+                            <div className="text-xs text-gray-500">User Account</div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>{getDisplayValue(emp.email)}</TableCell>
+                      <TableCell>
+                        <div className="font-medium">{getDisplayValue(emp.position, 'No position set')}</div>
+                        {/* Show if position was updated from profile */}
+                        {emp.currentTitle && emp.currentTitle !== emp.position && (
+                          <div className="text-xs text-gray-500">Profile: {emp.currentTitle}</div>
+                        )}
+                      </TableCell>
+                      <TableCell>{getDisplayValue(emp.department, 'No department set')}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center space-x-1">
+                          <Building2 className="h-3 w-3 text-gray-500" />
+                          <span>{getDisplayValue(emp.companyName, 'No company set')}</span>
+                        </div>
+                      </TableCell>
                       <TableCell className="font-semibold">
-                        {formatCurrency(emp.salary)}
+                        <div>{formatCurrency(emp.salary)}</div>
+                        {emp.salary ? (
+                          <div className="text-xs text-gray-500">Monthly</div>
+                        ) : (
+                          <div className="text-xs text-red-500">Not set</div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          emp.status === 'active' ? 'bg-green-100 text-green-800' :
-                          emp.status === 'inactive' ? 'bg-yellow-100 text-yellow-800' :
+                          emp.status === 'Active' ? 'bg-green-100 text-green-800' :
+                          emp.status === 'Inactive' ? 'bg-yellow-100 text-yellow-800' :
+                          emp.status === 'On Leave' ? 'bg-blue-100 text-blue-800' :
                           'bg-red-100 text-red-800'
                         }`}>
-                          {emp.status || 'active'}
+                          {emp.status || 'Active'}
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
@@ -156,15 +267,26 @@ export default function Employees() {
                           <Button
                             variant="outline"
                             size="sm"
+                            onClick={() => handleView(emp)}
+                            title="View employee details"
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => handleEdit(emp)}
+                            title="Edit employee"
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleDelete(emp._id, emp.name)}
+                            onClick={() => handleDelete(emp._id, getFullName(emp))}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Delete employee"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -183,6 +305,13 @@ export default function Employees() {
               <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No employees found</h3>
               <p className="text-gray-600">Try adjusting your search criteria</p>
+              <Button 
+                variant="outline" 
+                onClick={() => setSearchTerm('')}
+                className="mt-2"
+              >
+                Clear Search
+              </Button>
             </div>
           )}
         </CardContent>
@@ -192,6 +321,12 @@ export default function Employees() {
         isOpen={isAddDialogOpen} 
         onClose={handleCloseDialog}
         editingEmployee={editingEmployee}
+      />
+
+      <EmployeeDetailView 
+        employee={viewingEmployee}
+        isOpen={!!viewingEmployee}
+        onClose={() => setViewingEmployee(null)}
       />
     </div>
   );

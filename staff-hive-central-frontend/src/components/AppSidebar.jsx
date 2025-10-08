@@ -11,7 +11,8 @@ import {
   Briefcase,
   FileText,
   Calendar,
-  Clock // Added for attendance
+  Clock,
+  UserCheck // ✅ Added for Pending Users
 } from "lucide-react"
 import { ChevronDown } from 'lucide-react';
 import { NavLink, useLocation } from "react-router-dom"
@@ -33,7 +34,8 @@ const mainItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Companies", url: "/dashboard/companies", icon: Building2 },
   { title: "Employees", url: "/dashboard/employees", icon: Users },
-  { title: "Attendance", url: "/dashboard/attendance", icon: Clock }, // Added attendance
+  { title: "Pending Users", url: "/dashboard/pending-users", icon: UserCheck }, // ✅ Added Pending Users
+  { title: "Attendance", url: "/dashboard/attendance", icon: Clock },
   { title: "Payroll", url: "/dashboard/payroll", icon: CreditCard },
   { title: "Leave Management", url: "/dashboard/leave-management", icon: Calendar },
   { title: "Applicants", url: "/dashboard/applicants", icon: UserPlus },
