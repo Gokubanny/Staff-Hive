@@ -68,13 +68,14 @@ export const authAPI = {
 };
 
 // Employee API
+
 export const employeeAPI = {
   getAll: (params) => api.get('/employees', { params }),
   getById: (id) => api.get(`/employees/${id}`),
+  getByUserId: (userId) => api.get(`/employees/user/${userId}`), // ✅ ADD THIS
   create: (employeeData) => api.post('/employees', employeeData),
   update: (id, employeeData) => api.put(`/employees/${id}`, employeeData),
   delete: (id) => api.delete(`/employees/${id}`),
-  getByUserId: (userId) => api.get(`/employees/user/${userId}`),
   updateStatus: (id, status) => api.patch(`/employees/${id}/status`, { status }),
 };
 

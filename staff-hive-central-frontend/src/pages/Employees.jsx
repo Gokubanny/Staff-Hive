@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Edit, Trash2, Search, Users, RefreshCw, Building2, Eye } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Users, RefreshCw, Building2, Eye, ChevronDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import AddEmployee from "../components/AddEmployee";
 import EmployeeDetailView from "../components/EmployeeDetailView";
@@ -15,6 +15,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useData } from "@/contexts/DataContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -25,12 +31,35 @@ export default function Employees() {
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [viewingEmployee, setViewingEmployee] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedDepartment, setSelectedDepartment] = useState('All Departments');
+  const [selectedStatus, setSelectedStatus] = useState('All Status');
   const [refreshing, setRefreshing] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchEmployees();
   }, [fetchEmployees]);
+
+  // Get unique departments from employees
+  const getUniqueDepartments = () => {
+    const departments = employees
+      .map(emp => emp.department)
+      .filter(dept => dept && dept.trim() !== '')
+      .filter((dept, index, arr) => arr.indexOf(dept) === index)
+      .sort();
+    
+    return ['All Departments', ...departments];
+  };
+
+  // Get unique statuses from employees
+  const getUniqueStatuses = () => {
+    const statuses = employees
+      .map(emp => emp.status || 'Active')
+      .filter((status, index, arr) => arr.indexOf(status) === index)
+      .sort();
+    
+    return ['All Status', ...statuses];
+  };
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-NG', {
@@ -50,8 +79,9 @@ export default function Employees() {
     return value && value !== '' ? value : fallback;
   };
 
-  // Fixed filter with null/undefined checks
+  // Fixed filter with department and status filters
   const filteredEmployees = employees.filter(employee => {
+    // Search term filter
     const fullName = getFullName(employee).toLowerCase();
     const email = (employee.email || '').toLowerCase();
     const position = (employee.position || '').toLowerCase();
@@ -59,11 +89,22 @@ export default function Employees() {
     const companyName = (employee.companyName || '').toLowerCase();
     const searchLower = searchTerm.toLowerCase();
 
-    return fullName.includes(searchLower) ||
-           email.includes(searchLower) ||
-           position.includes(searchLower) ||
-           department.includes(searchLower) ||
-           companyName.includes(searchLower);
+    const matchesSearch = searchTerm === '' || 
+      fullName.includes(searchLower) ||
+      email.includes(searchLower) ||
+      position.includes(searchLower) ||
+      department.includes(searchLower) ||
+      companyName.includes(searchLower);
+
+    // Department filter
+    const matchesDepartment = selectedDepartment === 'All Departments' || 
+      employee.department === selectedDepartment;
+
+    // Status filter
+    const matchesStatus = selectedStatus === 'All Status' || 
+      (employee.status || 'Active') === selectedStatus;
+
+    return matchesSearch && matchesDepartment && matchesStatus;
   });
 
   const handleDelete = async (id, name) => {
@@ -120,6 +161,12 @@ export default function Employees() {
     }
   };
 
+  const clearFilters = () => {
+    setSearchTerm('');
+    setSelectedDepartment('All Departments');
+    setSelectedStatus('All Status');
+  };
+
   // Debug: Log employee data to see what's being displayed
   useEffect(() => {
     if (employees.length > 0) {
@@ -139,6 +186,9 @@ export default function Employees() {
   if (loading && employees.length === 0) {
     return <div className="flex items-center justify-center min-h-screen">Loading employees...</div>;
   }
+
+  const departments = getUniqueDepartments();
+  const statuses = getUniqueStatuses();
 
   return (
     <div className="px-6 py-8 ml-64">
@@ -173,20 +223,82 @@ export default function Employees() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center space-x-2 mb-4">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search employees by name, email, position, department, or company..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-sm"
-            />
+          {/* Search and Filter Section */}
+          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+            {/* Search Input */}
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, employee ID, or department..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            {/* Department Filter */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-full sm:w-[200px] justify-between">
+                  {selectedDepartment}
+                  <ChevronDown className="h-4 w-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-[200px] max-h-[300px] overflow-y-auto">
+                {departments.map((dept) => (
+                  <DropdownMenuItem
+                    key={dept}
+                    onClick={() => setSelectedDepartment(dept)}
+                    className={selectedDepartment === dept ? "bg-accent" : ""}
+                  >
+                    {dept}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Status Filter */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-full sm:w-[150px] justify-between">
+                  {selectedStatus}
+                  <ChevronDown className="h-4 w-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-[150px]">
+                {statuses.map((status) => (
+                  <DropdownMenuItem
+                    key={status}
+                    onClick={() => setSelectedStatus(status)}
+                    className={selectedStatus === status ? "bg-accent" : ""}
+                  >
+                    {status}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Clear Filters Button */}
+            {(searchTerm !== '' || selectedDepartment !== 'All Departments' || selectedStatus !== 'All Status') && (
+              <Button
+                variant="ghost"
+                onClick={clearFilters}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                Clear Filters
+              </Button>
+            )}
           </div>
 
           {/* Data Summary */}
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-2">
             <div className="text-sm text-gray-600">
               Showing {filteredEmployees.length} of {employees.length} employees
+              {(selectedDepartment !== 'All Departments' || selectedStatus !== 'All Status') && (
+                <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                  Filtered
+                </span>
+              )}
             </div>
             <div className="text-sm text-gray-600">
               Last updated: {new Date().toLocaleTimeString()}
@@ -304,13 +416,13 @@ export default function Employees() {
             <div className="text-center py-8">
               <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No employees found</h3>
-              <p className="text-gray-600">Try adjusting your search criteria</p>
+              <p className="text-gray-600 mb-4">Try adjusting your search criteria or filters</p>
               <Button 
                 variant="outline" 
-                onClick={() => setSearchTerm('')}
+                onClick={clearFilters}
                 className="mt-2"
               >
-                Clear Search
+                Clear All Filters
               </Button>
             </div>
           )}

@@ -1,3 +1,4 @@
+// UserProfilePage.jsx - FIXED WITH PROPER AUTH USER ID HANDLING
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,8 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/contexts/AuthContext';
-import { useData } from '@/contexts/DataContext';
 import { useToast } from '@/hooks/use-toast';
+import { employeeAPI } from '@/services/api';
 import { 
   User, 
   Mail, 
@@ -31,13 +32,12 @@ import {
 } from 'lucide-react';
 
 const UserProfilePage = () => {
-  const { user: authUser, updateProfile } = useAuth();
-  const { employees, updateEmployee, fetchEmployees } = useData();
+  const { user: authUser } = useAuth();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState('personal');
   const [loading, setLoading] = useState(true);
-  const [dataLoaded, setDataLoaded] = useState(false);
+  const [employeeRecord, setEmployeeRecord] = useState(null);
   
   const [profileData, setProfileData] = useState({
     // Personal Information
@@ -82,114 +82,103 @@ const UserProfilePage = () => {
   const [tempData, setTempData] = useState({ ...profileData });
   const [newSkill, setNewSkill] = useState('');
 
-  // Fetch user profile data on component mount
+  // Fetch employee record from backend
   useEffect(() => {
-    if (authUser && !dataLoaded) {
-      loadUserProfile();
+    if (authUser && (authUser.id || authUser._id)) {
+      loadEmployeeProfile();
+    } else if (authUser) {
+      // If authUser exists but no ID, try to load with fallback data
+      console.log('⚠️ Auth user exists but no ID found, using fallback data');
+      loadFallbackProfile();
     }
-  }, [authUser, dataLoaded]);
+  }, [authUser]);
 
-  // Also load when employees data changes
-  useEffect(() => {
-    if (authUser && employees.length > 0 && !dataLoaded) {
-      loadUserProfile();
-    }
-  }, [employees, authUser, dataLoaded]);
+  const loadFallbackProfile = () => {
+    const nameParts = (authUser?.name || '').split(' ');
+    const fallbackData = {
+      ...profileData,
+      firstName: nameParts[0] || '',
+      lastName: nameParts.slice(1).join(' ') || '',
+      email: authUser?.email || '',
+      currentCompany: authUser?.companyName || 'Your Company',
+      currentTitle: 'Employee',
+    };
+    setProfileData(fallbackData);
+    setTempData(fallbackData);
+    setLoading(false);
+  };
 
-  const loadUserProfile = async () => {
+  const loadEmployeeProfile = async () => {
     try {
       setLoading(true);
-      console.log('🔄 Loading user profile...', { authUser, employeesCount: employees.length });
-
-      // Fetch employees if not already loaded
-      if (employees.length === 0) {
-        console.log('📥 Fetching employees data...');
-        await fetchEmployees();
+      
+      // Get user ID - try different possible fields
+      const userId = authUser.id || authUser._id;
+      console.log('🔄 Loading employee profile for user:', userId);
+      
+      if (!userId) {
+        console.log('❌ No user ID found, using fallback data');
+        loadFallbackProfile();
+        return;
       }
 
-      // Find the employee record for current user
-      const userEmployee = employees.find(emp => {
-        const matchByEmail = emp.email === authUser.email;
-        const matchByUserId = emp.userId === authUser.id;
-        console.log('🔍 Searching for employee:', { 
-          userEmail: authUser.email, 
-          userId: authUser.id,
-          employeeEmail: emp.email,
-          employeeUserId: emp.userId,
-          matchByEmail,
-          matchByUserId
-        });
-        return matchByEmail || matchByUserId;
-      });
+      // Fetch employee record by user ID
+      const response = await employeeAPI.getByUserId(userId);
+      console.log('📥 Employee API response:', response);
 
-      console.log('✅ Found employee record:', userEmployee);
+      if (response?.data) {
+        const employee = response.data;
+        setEmployeeRecord(employee);
 
-      // Load profile data from localStorage or initialize
-      const userProfile = localStorage.getItem(`userProfile_${authUser.id}`);
-      let profileDataToUse;
-
-      if (userProfile) {
-        console.log('📁 Loading from localStorage');
-        profileDataToUse = JSON.parse(userProfile);
-      } else {
-        console.log('🆕 Creating new profile from user data');
-        // Initialize with auth user data and employee data
-        const nameParts = (authUser.name || '').split(' ');
-        profileDataToUse = {
-          ...profileData,
-          firstName: nameParts[0] || '',
-          lastName: nameParts.slice(1).join(' ') || '',
-          email: authUser.email || '',
-          currentCompany: authUser.companyName || userEmployee?.companyName || 'Your Company',
-          salary: userEmployee?.salary || '',
-          currentTitle: userEmployee?.position || 'Employee',
+        // Map employee data to profile data
+        const mappedData = {
+          firstName: employee.firstName || '',
+          lastName: employee.lastName || '',
+          email: employee.email || authUser.email,
+          phone: employee.phone || '',
+          dateOfBirth: employee.dateOfBirth ? employee.dateOfBirth.split('T')[0] : '',
+          address: employee.address || '',
+          bio: employee.bio || '',
+          
+          // Professional data
+          currentTitle: employee.position || '',
+          currentCompany: employee.companyName || authUser.companyName || '',
+          salary: employee.salary || '',
+          yearsExperience: employee.yearsExperience || '',
+          industry: employee.industry || '',
+          noticePeriod: employee.noticePeriod || '',
+          
+          // Arrays
+          skills: employee.skills || [],
+          education: employee.education || [],
+          experience: employee.experience || [],
+          certifications: employee.certifications || [],
+          socialLinks: employee.socialLinks || { linkedin: '', github: '', portfolio: '', twitter: '' }
         };
-      }
 
-      // Always update with latest employee data if available
-      if (userEmployee) {
-        console.log('🔄 Updating with employee data:', userEmployee);
-        profileDataToUse = {
-          ...profileDataToUse,
-          currentCompany: userEmployee.companyName || authUser.companyName || profileDataToUse.currentCompany,
-          salary: userEmployee.salary || profileDataToUse.salary,
-          currentTitle: userEmployee.position || profileDataToUse.currentTitle,
-          email: userEmployee.email || profileDataToUse.email,
-        };
+        console.log('✅ Mapped profile data:', mappedData);
+        setProfileData(mappedData);
+        setTempData(mappedData);
       } else {
+        // No employee record exists, use auth user data as fallback
         console.log('⚠️ No employee record found, using auth data');
-        // Use auth user data if no employee record found
-        profileDataToUse.currentCompany = authUser.companyName || profileDataToUse.currentCompany;
+        loadFallbackProfile();
       }
-
-      console.log('🎯 Final profile data:', profileDataToUse);
-      
-      setProfileData(profileDataToUse);
-      setTempData(profileDataToUse);
-      setDataLoaded(true);
-      
     } catch (error) {
-      console.error('❌ Error loading user profile:', error);
-      toast({
-        title: "Error loading profile",
-        description: "Failed to load your profile data.",
-        variant: "destructive",
-      });
+      console.error('❌ Error loading employee profile:', error);
       
-      // Set basic data even if there's an error
-      const nameParts = (authUser?.name || '').split(' ');
-      const fallbackData = {
-        ...profileData,
-        firstName: nameParts[0] || '',
-        lastName: nameParts.slice(1).join(' ') || '',
-        email: authUser?.email || '',
-        currentCompany: authUser?.companyName || 'Your Company',
-        currentTitle: 'Employee',
-      };
-      
-      setProfileData(fallbackData);
-      setTempData(fallbackData);
-      setDataLoaded(true);
+      // Check if it's a 404 (not found) error
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        console.log('👤 No employee record exists yet, using fallback data');
+        loadFallbackProfile();
+      } else {
+        toast({
+          title: "Error loading profile",
+          description: error.message || "Failed to load your profile data.",
+          variant: "destructive",
+        });
+        loadFallbackProfile();
+      }
     } finally {
       setLoading(false);
     }
@@ -211,75 +200,93 @@ const UserProfilePage = () => {
     setIsEditing(true);
   };
 
-// Update the handleSave function in UserProfilePage.jsx
-const handleSave = async () => {
-  try {
-    setLoading(true);
-    
-    // Find employee record
-    const userEmployee = employees.find(emp => 
-      emp.email === authUser.email || emp.userId === authUser.id
-    );
+  const handleSave = async () => {
+    try {
+      setLoading(true);
+      console.log('💾 Saving profile data to backend...');
 
-    if (userEmployee) {
-      try {
-        console.log('💾 Updating employee record with profile data');
-        
-        await updateEmployee(userEmployee._id, {
-          // Personal info
-          firstName: tempData.firstName,
-          lastName: tempData.lastName,
-          email: tempData.email,
-          phone: tempData.phone || 'To be updated',
-          bio: tempData.bio,
-          
-          // Professional info - THIS IS KEY!
-          position: tempData.currentTitle, // Maps to employee.position
-          department: tempData.department || tempData.currentTitle || 'General', // Maps to employee.department
-          salary: parseFloat(tempData.salary) || 0, // Maps to employee.salary
-          companyName: tempData.currentCompany, // Maps to employee.companyName
-          
-          // Additional profile data
-          skills: tempData.skills,
-          education: tempData.education,
-          experience: tempData.experience,
-          certifications: tempData.certifications,
-          socialLinks: tempData.socialLinks,
-          yearsExperience: tempData.yearsExperience,
-          industry: tempData.industry,
-          noticePeriod: tempData.noticePeriod,
+      // Get user ID
+      const userId = authUser.id || authUser._id;
+      
+      if (!userId) {
+        toast({
+          title: "Error",
+          description: "User not authenticated properly.",
+          variant: "destructive",
         });
-        
-        console.log('✅ Employee record updated successfully');
-      } catch (empError) {
-        console.error('⚠️ Could not update employee record:', empError);
+        return;
       }
-    }
 
-    // Save to localStorage
-    localStorage.setItem(`userProfile_${authUser.id}`, JSON.stringify(tempData));
-    
-    setProfileData({ ...tempData });
-    setIsEditing(false);
-    
-    // Refresh employees data to see changes
-    await fetchEmployees();
-    
-    toast({
-      title: "Profile Updated",
-      description: "Your profile and employee record have been synchronized.",
-    });
-  } catch (error) {
-    console.error('❌ Error saving profile:', error);
-    toast({
-      title: "Error saving profile",
-      description: error.message || "Failed to update your profile.",
-      variant: "destructive",
-    });
-  } finally {
-    setLoading(false);
-  }
-};
+      // Prepare update data
+      const updateData = {
+        // Personal info
+        firstName: tempData.firstName,
+        lastName: tempData.lastName,
+        email: tempData.email,
+        phone: tempData.phone || 'To be updated',
+        dateOfBirth: tempData.dateOfBirth,
+        address: tempData.address,
+        bio: tempData.bio,
+        
+        // Professional info
+        position: tempData.currentTitle,
+        department: tempData.department || tempData.currentTitle || 'General',
+        salary: parseFloat(tempData.salary) || 0,
+        companyName: tempData.currentCompany,
+        
+        // Additional profile data
+        skills: tempData.skills,
+        education: tempData.education,
+        experience: tempData.experience,
+        certifications: tempData.certifications,
+        socialLinks: tempData.socialLinks,
+        yearsExperience: tempData.yearsExperience,
+        industry: tempData.industry,
+        noticePeriod: tempData.noticePeriod,
+      };
+
+      console.log('📤 Sending update data:', updateData);
+
+      let response;
+      
+      if (employeeRecord) {
+        // Update existing employee record
+        response = await employeeAPI.update(employeeRecord._id, updateData);
+      } else {
+        // Create new employee record
+        response = await employeeAPI.create({
+          ...updateData,
+          userId: userId,
+          status: 'active'
+        });
+      }
+      
+      console.log('✅ Save response:', response);
+
+      if (response?.data) {
+        setEmployeeRecord(response.data);
+        setProfileData({ ...tempData });
+        setIsEditing(false);
+        
+        toast({
+          title: "Profile Updated",
+          description: "Your profile has been saved successfully.",
+        });
+
+        // Reload to ensure data is fresh
+        await loadEmployeeProfile();
+      }
+    } catch (error) {
+      console.error('❌ Error saving profile:', error);
+      toast({
+        title: "Error saving profile",
+        description: error.message || "Failed to update your profile.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleCancel = () => {
     setTempData({ ...profileData });
@@ -419,7 +426,7 @@ const handleSave = async () => {
   const profileCompletion = calculateProfileCompletion();
 
   // Show loading only on initial load, not when saving
-  if (loading && !dataLoaded) {
+  if (loading && !profileData.firstName) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -669,8 +676,8 @@ const handleSave = async () => {
         </Card>
       )}
 
-{/* Personal Information Tab */}
-{activeTab === 'personal' && (
+      {/* Personal Information Tab */}
+      {activeTab === 'personal' && (
         <Card>
           <CardHeader>
             <CardTitle>Personal Information</CardTitle>
@@ -1055,7 +1062,6 @@ const handleSave = async () => {
           </CardContent>
         </Card>
       )}
-
     </div>
   );
 };
