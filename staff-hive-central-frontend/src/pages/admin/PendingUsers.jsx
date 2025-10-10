@@ -29,7 +29,7 @@ const PendingUsers = () => {
   const fetchPendingUsers = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('http://localhost:5000/api/auth/pending-users', {
+      const response = await axios.get('https://staff-hive-backend.onrender.com/api/auth/pending-users', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setPendingUsers(response.data.data || []);
@@ -49,7 +49,7 @@ const PendingUsers = () => {
     try {
       setActionLoading(true);
       const response = await axios.post(
-        `http://localhost:5000/api/auth/verify-user/${userId}`,
+        `https://staff-hive-backend.onrender.com/api/auth/verify-user/${userId}`,
         { action: 'approve' },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -85,7 +85,7 @@ const PendingUsers = () => {
     try {
       setActionLoading(true);
       await axios.post(
-        `http://localhost:5000/api/auth/verify-user/${selectedUser._id}`,
+        `https://staff-hive-backend.onrender.com/api/auth/verify-user/${selectedUser._id}`,
         { action: 'reject', reason: rejectionReason },
         { headers: { Authorization: `Bearer ${token}` } }
       );

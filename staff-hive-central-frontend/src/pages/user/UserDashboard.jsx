@@ -13,18 +13,58 @@ import {
 
 const UserDashboard = () => {
   const { user: authUser } = useAuth();
-  const { applicants, fetchApplicants } = useData();
+  const { applicants, fetchApplicants, employees, fetchEmployees } = useData();
   const [notifications, setNotifications] = useState([]);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [employeeRecord, setEmployeeRecord] = useState(null);
+
+  // Calculate profile completion using the same logic as UserProfilePage
+  const calculateProfileCompletion = (employeeData) => {
+    if (!employeeData) return 0;
+    
+    const fields = [
+      employeeData.firstName, 
+      employeeData.lastName, 
+      employeeData.email, 
+      employeeData.phone, 
+      employeeData.bio, 
+      employeeData.position || employeeData.currentTitle,
+      employeeData.companyName || employeeData.currentCompany,
+      (employeeData.skills || []).length > 0,
+      (employeeData.education || []).length > 0,
+      (employeeData.experience || []).length > 0
+    ];
+    
+    const completed = fields.filter(field => {
+      if (typeof field === 'boolean') return field;
+      return field && field !== '';
+    }).length;
+    
+    return Math.round((completed / fields.length) * 100);
+  };
 
   // Memoized data fetching to prevent infinite loops
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
+
+      // Fetch employees to get the user's employee record
+      if (!employees.length && !dataLoaded) {
+        await fetchEmployees();
+      }
+
+      // Find employee record for current user
+      const userEmployee = employees.find(emp => 
+        emp.email === authUser.email || emp.userId === authUser.id
+      );
+      
+      if (userEmployee) {
+        setEmployeeRecord(userEmployee);
+      }
 
       // Only fetch applicants if not already loaded
       if (!applicants.length && !dataLoaded) {
@@ -58,7 +98,7 @@ const UserDashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [applicants.length, fetchApplicants, dataLoaded]);
+  }, [applicants.length, fetchApplicants, dataLoaded, employees, fetchEmployees, authUser]);
 
   useEffect(() => {
     if (authUser && !dataLoaded) {
@@ -70,6 +110,9 @@ const UserDashboard = () => {
 
   // Use authUser from AuthContext instead of making separate API call
   const user = authUser;
+
+  // Calculate profile completion for the dashboard
+  const profileCompletion = calculateProfileCompletion(employeeRecord);
 
   if (loading) {
     return (
@@ -177,8 +220,8 @@ const UserDashboard = () => {
           <div className="text-right">
             <p className="text-sm text-blue-100">Profile Completion</p>
             <div className="flex items-center gap-2 mt-1">
-              <Progress value={user.profileCompletion || 0} className="w-24 h-2" />
-              <span className="text-sm font-semibold">{user.profileCompletion || 0}%</span>
+              <Progress value={profileCompletion} className="w-24 h-2" />
+              <span className="text-sm font-semibold">{profileCompletion}%</span>
             </div>
           </div>
         </div>

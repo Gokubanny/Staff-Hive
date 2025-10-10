@@ -1,5 +1,5 @@
 // services/authService.js - Frontend Authentication Service
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'https://staff-hive-backend.onrender.com/api';
 
 class AuthService {
   // Get stored token
