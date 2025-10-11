@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "prebuild": "chmod +x ./node_modules/.bin/vite || true",
     "dev": "vite",
     "build": "npx vite build",
     "build:dev": "vite build --mode development",
@@ -73,5 +74,8 @@
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.3",
     "vite": "^5.4.20"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }
