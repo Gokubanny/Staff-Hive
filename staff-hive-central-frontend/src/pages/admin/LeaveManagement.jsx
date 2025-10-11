@@ -39,19 +39,13 @@ import {
   DialogTitle
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { useLeave } from '../../contexts/LeaveContext';
+
+const API_BASE_URL = "https://staff-hive-backend.onrender.com/api";
 
 const AdminLeaveManagement = () => {
-  const {
-    leaveRequests,
-    isLoading,
-    error,
-    loadAllLeaveRequests,
-    updateLeaveStatus,
-    getLeaveStatistics,
-    clearError
-  } = useLeave();
-
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('pending');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -63,10 +57,103 @@ const AdminLeaveManagement = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [statistics, setStatistics] = useState(null);
 
+  // Load leave requests
+  const loadAllLeaveRequests = async (filters = {}) => {
+    try {
+      setIsLoading(true);
+      const token = localStorage.getItem('token');
+      
+      const params = new URLSearchParams(filters);
+      const response = await fetch(`${API_BASE_URL}/leave/admin/all?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setLeaveRequests(result.data || []);
+      } else {
+        throw new Error('Failed to fetch leave requests');
+      }
+    } catch (error) {
+      console.error('Error loading leave requests:', error);
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Update leave status
+  const updateLeaveStatus = async (requestId, status, reason = '') => {
+    try {
+      setActionLoading(true);
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(`${API_BASE_URL}/leave/admin/update-status`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ requestId, status, reason })
+      });
+
+      const result = await response.json();
+      
+      if (response.ok) {
+        // Update local state
+        setLeaveRequests(prev => 
+          prev.map(req => 
+            (req._id === requestId || req.requestId === requestId) 
+              ? { ...req, status, rejectionReason: reason } 
+              : req
+          )
+        );
+        return result;
+      } else {
+        throw new Error(result.message || 'Failed to update leave status');
+      }
+    } catch (error) {
+      console.error('Error updating leave status:', error);
+      setError(error.message);
+      throw error;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Get leave statistics
+  const getLeaveStatistics = async (startDate, endDate) => {
+    try {
+      const token = localStorage.getItem('token');
+      const params = new URLSearchParams({ startDate, endDate });
+      
+      const response = await fetch(`${API_BASE_URL}/leave/admin/stats?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        return result.data;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching statistics:', error);
+      return null;
+    }
+  };
+
+  const clearError = () => setError(null);
+
   // Load leave requests on component mount
   useEffect(() => {
     loadAllLeaveRequests();
-  }, [loadAllLeaveRequests]);
+  }, []);
 
   // Load statistics
   useEffect(() => {
@@ -86,33 +173,15 @@ const AdminLeaveManagement = () => {
     };
 
     loadStats();
-  }, [getLeaveStatistics, leaveRequests]);
-
-  // Listen for new requests
-  useEffect(() => {
-    const handleNewRequest = (event) => {
-      const { request, isNew } = event.detail;
-      if (isNew) {
-        setShowNotification(true);
-        setTimeout(() => setShowNotification(false), 5000);
-        // Refresh the list
-        loadAllLeaveRequests();
-      }
-    };
-
-    window.addEventListener('leaveRequestSubmitted', handleNewRequest);
-    
-    return () => {
-      window.removeEventListener('leaveRequestSubmitted', handleNewRequest);
-    };
-  }, [loadAllLeaveRequests]);
+  }, [leaveRequests]);
 
   const handleApprove = async (request) => {
     setActionLoading(true);
     clearError();
 
     try {
-      await updateLeaveStatus(request.requestId || request.id, 'approved');
+      const requestId = request.requestId || request._id;
+      await updateLeaveStatus(requestId, 'approved');
       setShowNotification(false);
     } catch (error) {
       console.error('Error approving request:', error);
@@ -137,11 +206,8 @@ const AdminLeaveManagement = () => {
     clearError();
 
     try {
-      await updateLeaveStatus(
-        selectedRequest.requestId || selectedRequest.id, 
-        'rejected', 
-        rejectionReason
-      );
+      const requestId = selectedRequest.requestId || selectedRequest._id;
+      await updateLeaveStatus(requestId, 'rejected', rejectionReason);
       setShowRejectDialog(false);
       setSelectedRequest(null);
       setRejectionReason('');
@@ -442,7 +508,7 @@ const AdminLeaveManagement = () => {
             ) : (
               <div className="space-y-4">
                 {filteredRequests.map((request) => (
-                  <div key={request.requestId || request.id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+                  <div key={request.requestId || request._id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
@@ -534,13 +600,6 @@ const AdminLeaveManagement = () => {
                         >
                           <XCircle className="w-4 h-4 mr-2" />
                           Reject
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                        >
-                          <Eye className="w-4 h-4 mr-2" />
-                          View Details
                         </Button>
                       </div>
                     )}

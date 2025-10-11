@@ -23,11 +23,11 @@ exports.submitLeaveRequest = async (req, res) => {
 
     const userId = req.user.userId;
 
-    if (!employeeId || !leaveType || !startDate || !endDate || !reason) {
+    if (!employeeId || !leaveType || !startDate || !endDate || !reason || !managerEmail) {
       return res.status(400).json({
         success: false,
         message:
-          "Missing required fields: employeeId, leaveType, startDate, endDate, reason",
+          "Missing required fields: employeeId, leaveType, startDate, endDate, reason, managerEmail",
       });
     }
 
@@ -76,6 +76,15 @@ exports.submitLeaveRequest = async (req, res) => {
 
     await leaveRequest.save();
 
+    // Update employee's pending leave balance
+    const leaveTypeKey = leaveType.toLowerCase().replace(' leave', '');
+    await Employee.findOneAndUpdate(
+      { employeeId: employeeId },
+      { 
+        $inc: { [`leaveBalances.${leaveTypeKey}.pending`]: calculatedDays } 
+      }
+    );
+
     res.status(201).json({
       success: true,
       message: "Leave request submitted successfully",
@@ -97,7 +106,7 @@ exports.getUserLeaveRequests = async (req, res) => {
     const userId = req.user.userId;
     const { status, page = 1, limit = 10 } = req.query;
 
-    let query = { userId, employeeId };
+    let query = { $or: [{ userId }, { employeeId }] };
     if (status && status !== "all") query.status = status;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -216,8 +225,9 @@ exports.updateLeaveStatus = async (req, res) => {
       });
     }
 
+    // Update leave request status
     leaveRequest.status = status;
-    leaveRequest[`${status}By`] = "Admin";
+    leaveRequest[`${status}By`] = user.name || "Admin";
     leaveRequest[`${status}Date`] = new Date().toISOString().split("T")[0];
     leaveRequest.lastUpdated = new Date();
 
@@ -226,6 +236,31 @@ exports.updateLeaveStatus = async (req, res) => {
     }
 
     await leaveRequest.save();
+
+    // Update employee's leave balance if approved
+    if (status === "approved") {
+      const leaveTypeKey = leaveRequest.leaveType.toLowerCase().replace(' leave', '');
+      await Employee.findOneAndUpdate(
+        { employeeId: leaveRequest.employeeId },
+        { 
+          $inc: { 
+            [`leaveBalances.${leaveTypeKey}.used`]: leaveRequest.days,
+            [`leaveBalances.${leaveTypeKey}.pending`]: -leaveRequest.days
+          } 
+        }
+      );
+    } else if (status === "rejected") {
+      // Remove pending days if rejected
+      const leaveTypeKey = leaveRequest.leaveType.toLowerCase().replace(' leave', '');
+      await Employee.findOneAndUpdate(
+        { employeeId: leaveRequest.employeeId },
+        { 
+          $inc: { 
+            [`leaveBalances.${leaveTypeKey}.pending`]: -leaveRequest.days
+          } 
+        }
+      );
+    }
 
     res.json({
       success: true,
@@ -247,29 +282,47 @@ exports.getLeaveBalance = async (req, res) => {
     const { employeeId } = req.params;
     const userId = req.user.userId;
 
-    let employee = await Employee.findOne({ userId, employeeId });
+    let employee = await Employee.findOne({ 
+      $or: [
+        { userId: userId },
+        { employeeId: employeeId }
+      ]
+    });
 
     const defaultBalances = {
-      annual: 25,
-      sick: 15,
-      personal: 7,
-      maternity: 120,
-      paternity: 14,
-      bereavement: 5,
-      emergency: 3,
+      annual: { allocated: 25, used: 0, pending: 0, current: 25 },
+      sick: { allocated: 15, used: 0, pending: 0, current: 15 },
+      personal: { allocated: 7, used: 0, pending: 0, current: 7 },
+      maternity: { allocated: 120, used: 0, pending: 0, current: 120 },
+      paternity: { allocated: 14, used: 0, pending: 0, current: 14 },
+      bereavement: { allocated: 5, used: 0, pending: 0, current: 5 },
+      emergency: { allocated: 3, used: 0, pending: 0, current: 3 },
     };
 
-    const leaveBalances = employee?.leaveBalances || defaultBalances;
+    // Use employee's leave balances or defaults
+    let leaveBalances = defaultBalances;
+    if (employee && employee.leaveBalances) {
+      leaveBalances = { ...defaultBalances };
+      Object.keys(employee.leaveBalances).forEach(type => {
+        if (leaveBalances[type]) {
+          leaveBalances[type] = {
+            ...leaveBalances[type],
+            ...employee.leaveBalances[type],
+            current: leaveBalances[type].allocated - (employee.leaveBalances[type].used || 0)
+          };
+        }
+      });
+    }
 
     const currentYear = new Date().getFullYear();
     const yearStart = new Date(currentYear, 0, 1);
     const yearEnd = new Date(currentYear, 11, 31);
 
+    // Get actual used leave from approved requests
     const usedLeave = await LeaveRequest.aggregate([
       {
         $match: {
-          userId,
-          employeeId,
+          $or: [{ userId }, { employeeId }],
           status: "approved",
           startDate: {
             $gte: yearStart.toISOString().split("T")[0],
@@ -277,28 +330,53 @@ exports.getLeaveBalance = async (req, res) => {
           },
         },
       },
-      { $group: { _id: "$leaveType", totalDays: { $sum: "$days" } } },
+      { 
+        $group: { 
+          _id: "$leaveType", 
+          totalDays: { $sum: "$days" } 
+        } 
+      },
     ]);
 
+    // Get pending leave
     const pendingLeave = await LeaveRequest.aggregate([
       {
         $match: {
-          userId,
-          employeeId,
+          $or: [{ userId }, { employeeId }],
           status: "pending",
           startDate: { $gte: new Date().toISOString().split("T")[0] },
         },
       },
-      { $group: { _id: "$leaveType", totalDays: { $sum: "$days" } } },
+      { 
+        $group: { 
+          _id: "$leaveType", 
+          totalDays: { $sum: "$days" } 
+        } 
+      },
     ]);
 
+    // Update balances with actual data
     const currentBalances = {};
     Object.keys(leaveBalances).forEach((type) => {
-      const allocated = leaveBalances[type];
-      const used = usedLeave.find((u) => u._id === type)?.totalDays || 0;
-      const pending = pendingLeave.find((p) => p._id === type)?.totalDays || 0;
+      const allocated = leaveBalances[type].allocated;
+      const usedRecord = usedLeave.find(u => 
+        u._id.toLowerCase().includes(type)
+      );
+      const used = usedRecord?.totalDays || leaveBalances[type].used || 0;
+      
+      const pendingRecord = pendingLeave.find(p => 
+        p._id.toLowerCase().includes(type)
+      );
+      const pending = pendingRecord?.totalDays || leaveBalances[type].pending || 0;
+      
       const current = Math.max(0, allocated - used);
-      currentBalances[type] = { allocated, used, pending, current };
+      
+      currentBalances[type] = { 
+        allocated, 
+        used, 
+        pending, 
+        current 
+      };
     });
 
     res.json({

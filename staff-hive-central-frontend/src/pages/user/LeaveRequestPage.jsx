@@ -19,63 +19,65 @@ import {
 } from "@/components/ui/alert";
 import { 
   Calendar,
-  Clock,
   AlertCircle,
   Send,
   RotateCcw,
-  Menu,
   FileText,
   User,
   CheckCircle,
   Info,
-  Calculator
+  Calculator,
+  Loader2,
+  Building2
 } from "lucide-react";
+
+const API_BASE_URL = "https://staff-hive-backend.onrender.com/api";
 
 const leaveTypes = [
   { 
-    id: "annual", 
+    id: "Annual Leave", 
     name: "Annual Leave", 
     description: "Vacation time for rest and relaxation",
     maxDays: 25,
     minNotice: 7
   },
   { 
-    id: "sick", 
+    id: "Sick Leave", 
     name: "Sick Leave", 
     description: "Medical leave for illness or injury",
     maxDays: 15,
     minNotice: 0
   },
   { 
-    id: "personal", 
+    id: "Personal Leave", 
     name: "Personal Leave", 
     description: "Leave for personal matters",
-    maxDays: 5,
+    maxDays: 7,
     minNotice: 3
   },
   { 
-    id: "maternity", 
+    id: "Maternity Leave", 
     name: "Maternity Leave", 
     description: "Leave for childbirth and bonding",
     maxDays: 120,
     minNotice: 30
   },
   { 
-    id: "paternity", 
+    id: "Paternity Leave", 
     name: "Paternity Leave", 
     description: "Leave for new fathers",
     maxDays: 14,
     minNotice: 30
   },
   { 
-    id: "bereavement", 
+    id: "Bereavement Leave", 
     name: "Bereavement Leave", 
     description: "Leave for family loss",
     maxDays: 5,
     minNotice: 0
   },
   { 
-    id: "emergency", 
+    id: "Emergency Leave", 
     name: "Emergency Leave", 
     description: "Unforeseen circumstances",
     maxDays: 3,
@@ -83,28 +85,31 @@ const leaveTypes = [
   },
 ];
 
-// Mock user data - in real app, this would come from context/API
-const mockUser = {
-  name: "John Doe",
-  employeeId: "EMP001",
-  department: "Engineering",
-  manager: "Jane Smith",
-  email: "john.doe@company.com",
-  leaveBalances: {
-    annual: 18,
-    sick: 10,
-    personal: 5,
-    maternity: 120,
-    paternity: 14,
-    bereavement: 5,
-    emergency: 3
-  }
+// Toast notification component
+const Toast = ({ message, type, onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+
+  return (
+    <div className={`fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-in slide-in-from-top`}>
+      {message}
+    </div>
+  );
 };
 
 export default function LeaveRequestPage() {
+  const [user, setUser] = useState(null);
+  const [leaveBalance, setLeaveBalance] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [calculatedDays, setCalculatedDays] = useState(0);
   const [selectedLeaveType, setSelectedLeaveType] = useState(null);
+  const [isLoadingBalance, setIsLoadingBalance] = useState(true);
+  const [toast, setToast] = useState(null);
+  
   const [formData, setFormData] = useState({
     leaveType: "",
     startDate: "",
@@ -112,10 +117,63 @@ export default function LeaveRequestPage() {
     reason: "",
     emergencyContact: "",
     workHandover: "",
-    managerEmail: mockUser.manager ? `${mockUser.manager.toLowerCase().replace(' ', '.')}@company.com` : ""
+    managerEmail: ""
   });
 
-  // Calculate leave days when dates change
+  const showToast = (message, type = 'info') => {
+    setToast({ message, type });
+  };
+
+  // Load user data from localStorage
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const userData = localStorage.getItem('user');
+    
+    if (token && userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+      }
+    }
+  }, []);
+
+  // Load leave balance
+  useEffect(() => {
+    const loadBalance = async () => {
+      if (!user?.employeeId && !user?._id) return;
+      
+      try {
+        const token = localStorage.getItem('token');
+        const employeeId = user.employeeId || user._id;
+        
+        const response = await fetch(`${API_BASE_URL}/leave/balance/${employeeId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          setLeaveBalance(result.data);
+        } else {
+          console.log('Failed to load leave balance');
+        }
+      } catch (error) {
+        console.error('Error loading balance:', error);
+      } finally {
+        setIsLoadingBalance(false);
+      }
+    };
+
+    if (user) {
+      loadBalance();
+    }
+  }, [user]);
+
+  // Calculate days
   useEffect(() => {
     if (formData.startDate && formData.endDate) {
       const start = new Date(formData.startDate);
@@ -128,7 +186,7 @@ export default function LeaveRequestPage() {
     }
   }, [formData.startDate, formData.endDate]);
 
-  // Update selected leave type details
+  // Update selected leave type
   useEffect(() => {
     const type = leaveTypes.find(t => t.id === formData.leaveType);
     setSelectedLeaveType(type);
@@ -141,12 +199,45 @@ export default function LeaveRequestPage() {
     }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const validateLeaveBalance = () => {
+    if (!formData.leaveType || calculatedDays === 0) return true;
     
-    // Basic validation
+    const leaveTypeKey = formData.leaveType.toLowerCase().replace(' leave', '');
+    const balance = leaveBalance?.balances?.[leaveTypeKey];
+    
+    if (!balance) return true;
+    
+    if (calculatedDays > balance.current) {
+      showToast(`You only have ${balance.current} days remaining for ${formData.leaveType}. Please adjust your request.`, 'error');
+      return false;
+    }
+    
+    return true;
+  };
+
+  const validateNoticeRequirement = () => {
+    if (!formData.leaveType || !formData.startDate || !selectedLeaveType) return true;
+    
+    const start = new Date(formData.startDate);
+    const today = new Date();
+    const daysDiff = Math.ceil((start.getTime() - today.getTime()) / (1000 * 3600 * 24));
+    
+    if (daysDiff < selectedLeaveType.minNotice) {
+      showToast(`This leave type requires ${selectedLeaveType.minNotice} days advance notice. Please select a later start date.`, 'error');
+      return false;
+    }
+    
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (!user) {
+      showToast("User not authenticated", 'error');
+      return;
+    }
+    
     if (!formData.leaveType || !formData.startDate || !formData.endDate || !formData.reason || !formData.managerEmail) {
-      alert('Please fill in all required fields');
+      showToast('Please fill in all required fields', 'error');
       return;
     }
 
@@ -156,42 +247,67 @@ export default function LeaveRequestPage() {
 
     setIsSubmitting(true);
     
-    // Create leave request object
-    const leaveRequest = {
-      id: `LR_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      employeeName: mockUser.name,
-      employeeId: mockUser.employeeId,
-      department: mockUser.department,
-      email: mockUser.email,
-      leaveType: leaveTypes.find(t => t.id === formData.leaveType)?.name || formData.leaveType,
-      startDate: formData.startDate,
-      endDate: formData.endDate,
-      days: calculatedDays,
-      reason: formData.reason,
-      emergencyContact: formData.emergencyContact,
-      workHandover: formData.workHandover,
-      managerEmail: formData.managerEmail,
-      status: 'pending',
-      appliedDate: new Date().toISOString().split('T')[0],
-      submittedAt: new Date().toISOString(),
-      lastUpdated: new Date().toISOString()
-    };
-
     try {
-      // In a real app, you would send this to your backend API
-      // For now, we'll use localStorage and simulate API calls
-      const requests = JSON.parse(localStorage.getItem('leaveRequests') || '[]');
-      requests.push(leaveRequest);
-      localStorage.setItem('leaveRequests', JSON.stringify(requests));
+      const token = localStorage.getItem('token');
+      const employeeId = user.employeeId || user._id;
       
-      // Show success message
-      alert(`Leave request submitted successfully! Your ${leaveRequest.leaveType} request for ${calculatedDays} day(s) has been sent for approval.`);
-      
-      // Reset form
-      handleReset();
+      const leaveRequestData = {
+        employeeId: employeeId,
+        employeeName: user.name || 'Employee',
+        email: user.email,
+        department: user.department || 'General',
+        leaveType: formData.leaveType,
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        days: calculatedDays,
+        reason: formData.reason,
+        emergencyContact: formData.emergencyContact,
+        workHandover: formData.workHandover,
+        managerEmail: formData.managerEmail,
+        appliedDate: new Date().toISOString().split('T')[0]
+      };
+
+      console.log('Submitting leave request:', leaveRequestData);
+
+      const response = await fetch(`${API_BASE_URL}/leave/submit`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(leaveRequestData)
+      });
+
+      const result = await response.json();
+      console.log('Leave submission response:', result);
+
+      if (response.ok) {
+        showToast(`Leave request submitted successfully! Your ${formData.leaveType} request for ${calculatedDays} day(s) has been sent for approval.`, 'success');
+        
+        // Reload balance to reflect pending leave
+        try {
+          const balanceResponse = await fetch(`${API_BASE_URL}/leave/balance/${employeeId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (balanceResponse.ok) {
+            const balanceResult = await balanceResponse.json();
+            setLeaveBalance(balanceResult.data);
+          }
+        } catch (balanceError) {
+          console.error('Error reloading balance:', balanceError);
+        }
+        
+        handleReset();
+      } else {
+        showToast(result.message || 'Failed to submit leave request', 'error');
+      }
     } catch (error) {
       console.error('Error submitting leave request:', error);
-      alert('Failed to submit leave request. Please try again.');
+      showToast(error.message || 'Failed to submit leave request. Please try again.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -206,39 +322,43 @@ export default function LeaveRequestPage() {
       reason: "",
       emergencyContact: "",
       workHandover: "",
-      managerEmail: managerEmail // Keep manager email
+      managerEmail: managerEmail
     });
     setCalculatedDays(0);
     setSelectedLeaveType(null);
   };
 
-  const validateLeaveBalance = () => {
-    if (formData.leaveType && calculatedDays > 0) {
-      const balance = mockUser.leaveBalances[formData.leaveType] || 0;
-      if (calculatedDays > balance) {
-        alert(`You only have ${balance} days remaining for ${leaveTypes.find(t => t.id === formData.leaveType)?.name}. Please adjust your request.`);
-        return false;
-      }
-    }
-    return true;
+  const getLeaveBalance = (leaveType) => {
+    if (!leaveBalance?.balances) return null;
+    
+    const leaveTypeKey = leaveType.toLowerCase().replace(' leave', '');
+    return leaveBalance.balances[leaveTypeKey];
   };
 
-  const validateNoticeRequirement = () => {
-    if (formData.leaveType && formData.startDate && selectedLeaveType) {
-      const start = new Date(formData.startDate);
-      const today = new Date();
-      const daysDiff = Math.ceil((start.getTime() - today.getTime()) / (1000 * 3600 * 24));
-      if (daysDiff < selectedLeaveType.minNotice) {
-        alert(`This leave type requires ${selectedLeaveType.minNotice} days advance notice. Please select a later start date.`);
-        return false;
-      }
-    }
-    return true;
-  };
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Authentication Required</AlertTitle>
+          <AlertDescription>
+            Please log in to submit a leave request.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-6 max-w-6xl mx-auto">
-      {/* Header */}
+      {toast && (
+        <Toast 
+          message={toast.message} 
+          type={toast.type} 
+          onClose={() => setToast(null)} 
+        />
+      )}
+
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Request Leave</h1>
@@ -263,21 +383,27 @@ export default function LeaveRequestPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <Label className="text-sm font-medium text-gray-600">Name</Label>
-                  <p className="font-medium">{mockUser.name}</p>
+                  <p className="font-medium">{user.name || 'Employee'}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-gray-600">Employee ID</Label>
-                  <p className="font-medium">{mockUser.employeeId}</p>
+                  <p className="font-medium">{user.employeeId || 'N/A'}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-gray-600">Department</Label>
-                  <p className="font-medium">{mockUser.department}</p>
+                  <p className="font-medium">{user.department || 'General'}</p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-600">Manager</Label>
-                  <p className="font-medium">{mockUser.manager}</p>
+                  <Label className="text-sm font-medium text-gray-600">Email</Label>
+                  <p className="font-medium">{user.email}</p>
                 </div>
               </div>
+              {user.companyName && (
+                <div className="mt-4 flex items-center text-sm text-gray-600">
+                  <Building2 className="h-4 w-4 mr-2" />
+                  <span>{user.companyName}</span>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -290,7 +416,7 @@ export default function LeaveRequestPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Leave Type */}
                   <div>
@@ -382,18 +508,28 @@ export default function LeaveRequestPage() {
                 </div>
 
                 {/* Days Calculation */}
-                {calculatedDays > 0 && (
+                {calculatedDays > 0 && formData.leaveType && (
                   <div className="flex items-center gap-4 p-4 bg-blue-50 rounded-lg">
                     <Calculator className="h-5 w-5 text-blue-600" />
                     <div>
                       <p className="font-medium text-blue-900">
                         Total Leave Days: {calculatedDays} day{calculatedDays !== 1 ? 's' : ''}
                       </p>
-                      {selectedLeaveType && (
-                        <p className="text-sm text-blue-700">
-                          Remaining balance after this request: {(mockUser.leaveBalances[formData.leaveType] || 0) - calculatedDays} days
-                        </p>
-                      )}
+                      {(() => {
+                        const balance = getLeaveBalance(formData.leaveType);
+                        if (balance) {
+                          const remainingAfterRequest = balance.current - calculatedDays;
+                          return (
+                            <p className="text-sm text-blue-700">
+                              Remaining balance after this request: {Math.max(0, remainingAfterRequest)} days
+                              {remainingAfterRequest < 0 && (
+                                <span className="text-red-600 ml-2">(Exceeds available balance)</span>
+                              )}
+                            </p>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   </div>
                 )}
@@ -411,19 +547,24 @@ export default function LeaveRequestPage() {
                     Reset Form
                   </Button>
                   <Button 
-                    type="submit"
-                    disabled={
-                      isSubmitting || 
-                      (calculatedDays > 0 && !validateLeaveBalance()) ||
-                      (calculatedDays > 0 && !validateNoticeRequirement())
-                    }
+                    onClick={handleSubmit}
+                    disabled={isSubmitting}
                     className="w-full sm:w-auto min-w-[140px] bg-blue-600 hover:bg-blue-700 text-white"
                   >
-                    <Send className="h-4 w-4 mr-2" />
-                    {isSubmitting ? "Submitting..." : "Submit Request"}
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4 mr-2" />
+                        Submit Request
+                      </>
+                    )}
                   </Button>
                 </div>
-              </form>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -439,22 +580,32 @@ export default function LeaveRequestPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {Object.entries(mockUser.leaveBalances).map(([type, balance]) => {
-                const leaveType = leaveTypes.find(t => t.id === type);
-                return (
-                  <div key={type} className="flex justify-between items-center">
-                    <div>
-                      <p className="font-medium">{leaveType?.name || type}</p>
-                      <p className="text-xs text-gray-500">
-                        Max: {leaveType?.maxDays} days
-                      </p>
+              {isLoadingBalance ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                </div>
+              ) : leaveBalance?.balances ? (
+                Object.entries(leaveBalance.balances).map(([type, balance]) => {
+                  const leaveType = leaveTypes.find(t => t.id.toLowerCase().includes(type));
+                  const typeName = leaveType?.name || type.charAt(0).toUpperCase() + type.slice(1) + ' Leave';
+                  
+                  return (
+                    <div key={type} className="flex justify-between items-center p-2 border rounded-lg">
+                      <div>
+                        <p className="font-medium text-sm">{typeName}</p>
+                        <p className="text-xs text-gray-500">
+                          Used: {balance.used} / {balance.allocated}
+                        </p>
+                      </div>
+                      <Badge variant={balance.current > 5 ? "default" : balance.current > 0 ? "secondary" : "destructive"}>
+                        {balance.current} days
+                      </Badge>
                     </div>
-                    <Badge variant={balance > 5 ? "default" : balance > 0 ? "secondary" : "destructive"}>
-                      {balance} days
-                    </Badge>
-                  </div>
-                );
-              })}
+                  );
+                })
+              ) : (
+                <p className="text-sm text-gray-500 text-center py-4">No balance data available</p>
+              )}
             </CardContent>
           </Card>
 

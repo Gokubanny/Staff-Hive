@@ -43,19 +43,20 @@ import {
   BarChart3,
   PieChart,
   Activity,
-  Award
+  Award,
+  Building2,
+  User
 } from "lucide-react"
-import { useAuth } from "@/contexts/AuthContext"
-import { toast } from "sonner"
 
-// Leave type configurations
+const API_BASE_URL = "https://staff-hive-backend.onrender.com/api";
+
 const leaveTypeConfigs = {
   annual: {
     name: "Annual Leave",
     description: "Vacation and holiday time",
     yearlyAllocation: 25,
     carryOverLimit: 5,
-    accrualRate: 2.08, // per month
+    accrualRate: 2.08,
     canCarryOver: true,
     color: "bg-blue-500",
     textColor: "text-blue-700",
@@ -129,122 +130,185 @@ const leaveTypeConfigs = {
   }
 }
 
-// Mock employee data with balances
-const mockEmployee = {
-  name: "John Doe",
-  employeeId: "EMP001",
-  department: "Engineering",
-  hireDate: "2022-01-15",
-  currentBalances: {
-    annual: { current: 18, used: 7, allocated: 25, pending: 0 },
-    sick: { current: 12, used: 3, allocated: 15, pending: 0 },
-    personal: { current: 5, used: 2, allocated: 7, pending: 0 },
-    maternity: { current: 120, used: 0, allocated: 120, pending: 0 },
-    paternity: { current: 14, used: 0, allocated: 14, pending: 0 },
-    bereavement: { current: 5, used: 0, allocated: 5, pending: 0 },
-    emergency: { current: 3, used: 0, allocated: 3, pending: 0 }
-  }
-}
+const Toast = ({ message, type, onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
 
-// Mock balance history for the current year
-const balanceHistory = [
-  { month: "Jan 2024", annual: 25, sick: 15, personal: 7 },
-  { month: "Feb 2024", annual: 24, sick: 15, personal: 7 },
-  { month: "Mar 2024", annual: 21, sick: 12, personal: 5 },
-  { month: "Apr 2024", annual: 20, sick: 12, personal: 5 },
-  { month: "May 2024", annual: 19, sick: 12, personal: 5 },
-  { month: "Jun 2024", annual: 18, sick: 12, personal: 5 },
-  { month: "Jul 2024", annual: 18, sick: 12, personal: 5 },
-  { month: "Aug 2024", annual: 18, sick: 12, personal: 5 }
-]
+  const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+
+  return (
+    <div className={`fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-in slide-in-from-top`}>
+      {message}
+    </div>
+  );
+};
 
 export default function LeaveBalancePage() {
-  const { user } = useAuth()
-  const [selectedYear, setSelectedYear] = useState("2024")
-  const [leaveRequests, setLeaveRequests] = useState([])
-  const [pendingRequests, setPendingRequests] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [user, setUser] = useState(null);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [leaveBalance, setLeaveBalance] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [toast, setToast] = useState(null);
 
-  // Load data on component mount
+  const showToast = (message, type = 'info') => {
+    setToast({ message, type });
+  };
+
+  // Load user data from localStorage
   useEffect(() => {
-    loadLeaveData()
-  }, [])
-
-  const loadLeaveData = () => {
-    setIsLoading(true)
-    try {
-      const requests = JSON.parse(localStorage.getItem('leaveRequests') || '[]')
-      setLeaveRequests(requests)
-      
-      // Filter pending requests
-      const pending = requests.filter(req => req.status === 'pending')
-      setPendingRequests(pending)
-      
-      // Update pending days in balances based on actual requests
-      updatePendingBalances(pending)
-    } catch (error) {
-      console.error('Error loading leave data:', error)
-      toast.error('Failed to load balance data')
-    } finally {
-      setIsLoading(false)
+    const token = localStorage.getItem('token');
+    const userData = localStorage.getItem('user');
+    
+    if (token && userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+      }
     }
-  }
+  }, []);
 
-  const updatePendingBalances = (pending) => {
-    // Calculate pending days by leave type
-    const pendingByType = pending.reduce((acc, req) => {
-      const type = req.leaveType
-      if (!acc[type]) acc[type] = 0
-      acc[type] += req.daysRequested || 0
-      return acc
-    }, {})
+  // Load leave data
+  useEffect(() => {
+    if (!user) return;
+    
+    const loadLeaveData = async () => {
+      setIsLoading(true);
+      try {
+        const token = localStorage.getItem('token');
+        const employeeId = user.employeeId || user._id;
+        
+        // Fetch user's leave requests
+        const requestsResponse = await fetch(`${API_BASE_URL}/leave/user/${employeeId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
 
-    // Update mock employee data with actual pending requests
-    Object.keys(mockEmployee.currentBalances).forEach(type => {
-      mockEmployee.currentBalances[type].pending = pendingByType[type] || 0
-    })
-  }
+        if (requestsResponse.ok) {
+          const requestsResult = await requestsResponse.json();
+          setLeaveRequests(requestsResult.data || []);
+          
+          const pending = (requestsResult.data || []).filter(req => req.status === 'pending');
+          setPendingRequests(pending);
+        } else {
+          console.log('Failed to load leave requests');
+          setLeaveRequests([]);
+        }
+
+        // Fetch leave balance
+        const balanceResponse = await fetch(`${API_BASE_URL}/leave/balance/${employeeId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (balanceResponse.ok) {
+          const balanceResult = await balanceResponse.json();
+          setLeaveBalance(balanceResult.data);
+        } else {
+          console.log('Failed to load leave balance');
+        }
+      } catch (error) {
+        console.error('Error loading leave data:', error);
+        showToast('Failed to load balance data', 'error');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadLeaveData();
+  }, [user]);
 
   const getBalanceStatus = (current, allocated) => {
-    const percentage = (current / allocated) * 100
-    if (percentage <= 20) return { status: 'critical', color: 'text-red-600', bg: 'bg-red-100' }
-    if (percentage <= 50) return { status: 'low', color: 'text-orange-600', bg: 'bg-orange-100' }
-    if (percentage <= 80) return { status: 'good', color: 'text-yellow-600', bg: 'bg-yellow-100' }
-    return { status: 'excellent', color: 'text-green-600', bg: 'bg-green-100' }
-  }
+    const percentage = (current / allocated) * 100;
+    if (percentage <= 20) return { status: 'critical', color: 'text-red-600', bg: 'bg-red-100' };
+    if (percentage <= 50) return { status: 'low', color: 'text-orange-600', bg: 'bg-orange-100' };
+    if (percentage <= 80) return { status: 'good', color: 'text-yellow-600', bg: 'bg-yellow-100' };
+    return { status: 'excellent', color: 'text-green-600', bg: 'bg-green-100' };
+  };
 
   const calculateProjectedBalance = (type, currentBalance, monthsRemaining = 4) => {
-    const config = leaveTypeConfigs[type]
-    if (!config || config.accrualRate === 0) return currentBalance
+    const config = leaveTypeConfigs[type];
+    if (!config || config.accrualRate === 0) return currentBalance;
     
-    const accrual = config.accrualRate * monthsRemaining
-    return Math.min(currentBalance + accrual, config.yearlyAllocation)
-  }
+    const accrual = config.accrualRate * monthsRemaining;
+    return Math.min(currentBalance + accrual, config.yearlyAllocation);
+  };
 
   const handleExportBalances = () => {
     try {
       const exportData = {
-        employee: mockEmployee,
-        balances: mockEmployee.currentBalances,
-        history: balanceHistory,
+        employee: user,
+        balances: leaveBalance?.balances || {},
         exportDate: new Date().toISOString(),
-        year: selectedYear
-      }
+        year: selectedYear,
+        lastUpdated: leaveBalance?.lastUpdated
+      };
       
-      const dataStr = JSON.stringify(exportData, null, 2)
-      const dataBlob = new Blob([dataStr], { type: 'application/json' })
-      const url = URL.createObjectURL(dataBlob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `leave-balances-${selectedYear}.json`
-      link.click()
-      URL.revokeObjectURL(url)
+      const dataStr = JSON.stringify(exportData, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `leave-balances-${user.employeeId}-${selectedYear}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
       
-      toast.success("Leave balances exported successfully!")
+      showToast("Leave balances exported successfully!", 'success');
     } catch (error) {
-      toast.error("Failed to export leave balances")
+      showToast("Failed to export leave balances", 'error');
     }
-  }
+  };
+
+  const loadLeaveData = async () => {
+    if (!user) return;
+    
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const employeeId = user.employeeId || user._id;
+      
+      const requestsResponse = await fetch(`${API_BASE_URL}/leave/user/${employeeId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (requestsResponse.ok) {
+        const requestsResult = await requestsResponse.json();
+        setLeaveRequests(requestsResult.data || []);
+        
+        const pending = (requestsResult.data || []).filter(req => req.status === 'pending');
+        setPendingRequests(pending);
+      }
+
+      const balanceResponse = await fetch(`${API_BASE_URL}/leave/balance/${employeeId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (balanceResponse.ok) {
+        const balanceResult = await balanceResponse.json();
+        setLeaveBalance(balanceResult.data);
+      }
+    } catch (error) {
+      console.error('Error loading leave data:', error);
+      showToast('Failed to load balance data', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -254,11 +318,35 @@ export default function LeaveBalancePage() {
           <p className="text-muted-foreground">Loading your leave balances...</p>
         </div>
       </div>
-    )
+    );
   }
 
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Authentication Required</AlertTitle>
+          <AlertDescription>
+            Please log in to view your leave balances.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  const currentBalances = leaveBalance?.balances || {};
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 p-6 max-w-7xl mx-auto">
+      {toast && (
+        <Toast 
+          message={toast.message} 
+          type={toast.type} 
+          onClose={() => setToast(null)} 
+        />
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -292,7 +380,7 @@ export default function LeaveBalancePage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center">
-            <Award className="h-5 w-5 mr-2" />
+            <User className="h-5 w-5 mr-2" />
             Employee Information
           </CardTitle>
         </CardHeader>
@@ -300,21 +388,27 @@ export default function LeaveBalancePage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div>
               <Label className="text-sm font-medium text-muted-foreground">Name</Label>
-              <p className="font-medium">{mockEmployee.name}</p>
+              <p className="font-medium">{user.name || 'Employee'}</p>
             </div>
             <div>
               <Label className="text-sm font-medium text-muted-foreground">Employee ID</Label>
-              <p className="font-medium">{mockEmployee.employeeId}</p>
+              <p className="font-medium">{user.employeeId || 'N/A'}</p>
             </div>
             <div>
               <Label className="text-sm font-medium text-muted-foreground">Department</Label>
-              <p className="font-medium">{mockEmployee.department}</p>
+              <p className="font-medium">{user.department || 'General'}</p>
             </div>
             <div>
-              <Label className="text-sm font-medium text-muted-foreground">Hire Date</Label>
-              <p className="font-medium">{new Date(mockEmployee.hireDate).toLocaleDateString()}</p>
+              <Label className="text-sm font-medium text-muted-foreground">Email</Label>
+              <p className="font-medium">{user.email}</p>
             </div>
           </div>
+          {user.companyName && (
+            <div className="mt-4 flex items-center text-sm text-muted-foreground">
+              <Building2 className="h-4 w-4 mr-2" />
+              <span>{user.companyName}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -341,11 +435,13 @@ export default function LeaveBalancePage() {
         <TabsContent value="overview" className="space-y-6">
           {/* Balance Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Object.entries(mockEmployee.currentBalances).map(([type, balance]) => {
-              const config = leaveTypeConfigs[type]
-              const balanceStatus = getBalanceStatus(balance.current, balance.allocated)
-              const usagePercentage = ((balance.used / balance.allocated) * 100) || 0
-              const availablePercentage = ((balance.current / balance.allocated) * 100) || 0
+            {Object.entries(currentBalances).map(([type, balance]) => {
+              const config = leaveTypeConfigs[type];
+              if (!config) return null;
+              
+              const balanceStatus = getBalanceStatus(balance.current, balance.allocated);
+              const usagePercentage = ((balance.used / balance.allocated) * 100) || 0;
+              const availablePercentage = ((balance.current / balance.allocated) * 100) || 0;
               
               return (
                 <Card key={type} className="shadow-lg hover:shadow-xl transition-shadow">
@@ -413,7 +509,7 @@ export default function LeaveBalancePage() {
                     )}
                   </CardContent>
                 </Card>
-              )
+              );
             })}
           </div>
 
@@ -426,7 +522,7 @@ export default function LeaveBalancePage() {
                   <div className="ml-3">
                     <p className="text-sm font-medium text-muted-foreground">Total Available</p>
                     <p className="text-xl font-bold text-foreground">
-                      {Object.values(mockEmployee.currentBalances).reduce((sum, b) => sum + b.current, 0)}
+                      {Object.values(currentBalances).reduce((sum, b) => sum + b.current, 0)}
                     </p>
                   </div>
                 </div>
@@ -440,7 +536,7 @@ export default function LeaveBalancePage() {
                   <div className="ml-3">
                     <p className="text-sm font-medium text-muted-foreground">Total Used</p>
                     <p className="text-xl font-bold text-foreground">
-                      {Object.values(mockEmployee.currentBalances).reduce((sum, b) => sum + b.used, 0)}
+                      {Object.values(currentBalances).reduce((sum, b) => sum + b.used, 0)}
                     </p>
                   </div>
                 </div>
@@ -454,7 +550,7 @@ export default function LeaveBalancePage() {
                   <div className="ml-3">
                     <p className="text-sm font-medium text-muted-foreground">Pending</p>
                     <p className="text-xl font-bold text-foreground">
-                      {Object.values(mockEmployee.currentBalances).reduce((sum, b) => sum + b.pending, 0)}
+                      {Object.values(currentBalances).reduce((sum, b) => sum + b.pending, 0)}
                     </p>
                   </div>
                 </div>
@@ -468,7 +564,7 @@ export default function LeaveBalancePage() {
                   <div className="ml-3">
                     <p className="text-sm font-medium text-muted-foreground">Usage Rate</p>
                     <p className="text-xl font-bold text-foreground">
-                      {Math.round((Object.values(mockEmployee.currentBalances).reduce((sum, b) => sum + b.used, 0) / Object.values(mockEmployee.currentBalances).reduce((sum, b) => sum + b.allocated, 0)) * 100)}%
+                      {Math.round((Object.values(currentBalances).reduce((sum, b) => sum + b.used, 0) / Object.values(currentBalances).reduce((sum, b) => sum + b.allocated, 0)) * 100)}%
                     </p>
                   </div>
                 </div>
@@ -505,11 +601,13 @@ export default function LeaveBalancePage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {Object.entries(mockEmployee.currentBalances).map(([type, balance]) => {
-                      const config = leaveTypeConfigs[type]
-                      const balanceStatus = getBalanceStatus(balance.current, balance.allocated)
-                      const projected = calculateProjectedBalance(type, balance.current)
-                      const canCarryOver = config.canCarryOver ? Math.min(projected, config.carryOverLimit) : 0
+                    {Object.entries(currentBalances).map(([type, balance]) => {
+                      const config = leaveTypeConfigs[type];
+                      if (!config) return null;
+                      
+                      const balanceStatus = getBalanceStatus(balance.current, balance.allocated);
+                      const projected = calculateProjectedBalance(type, balance.current);
+                      const canCarryOver = config.canCarryOver ? Math.min(projected, config.carryOverLimit) : 0;
 
                       return (
                         <TableRow key={type} className="hover:bg-muted/30">
@@ -536,7 +634,7 @@ export default function LeaveBalancePage() {
                             </Badge>
                           </TableCell>
                         </TableRow>
-                      )
+                      );
                     })}
                   </TableBody>
                 </Table>
@@ -575,84 +673,48 @@ export default function LeaveBalancePage() {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <Activity className="h-5 w-5 mr-2" />
-                Balance History ({selectedYear})
+                Recent Leave Transactions
               </CardTitle>
               <CardDescription>
-                Monthly balance changes throughout the year
+                Approved leave requests affecting your balance
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead>Month</TableHead>
-                      <TableHead className="text-right">Annual Leave</TableHead>
-                      <TableHead className="text-right">Sick Leave</TableHead>
-                      <TableHead className="text-right">Personal Leave</TableHead>
-                      <TableHead className="text-right">Total Available</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {balanceHistory.map((record, index) => (
-                      <TableRow key={index} className="hover:bg-muted/30">
-                        <TableCell className="font-medium">{record.month}</TableCell>
-                        <TableCell className="text-right">{record.annual}</TableCell>
-                        <TableCell className="text-right">{record.sick}</TableCell>
-                        <TableCell className="text-right">{record.personal}</TableCell>
-                        <TableCell className="text-right font-medium">
-                          {record.annual + record.sick + record.personal}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Recent Transactions */}
-          {leaveRequests.filter(req => req.status === 'approved').length > 0 && (
-            <Card className="shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Clock className="h-5 w-5 mr-2" />
-                  Recent Leave Transactions
-                </CardTitle>
-                <CardDescription>
-                  Approved leave requests affecting your balance
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+              {leaveRequests.filter(req => req.status === 'approved').length > 0 ? (
                 <div className="space-y-4">
                   {leaveRequests
                     .filter(req => req.status === 'approved')
-                    .slice(0, 5)
+                    .slice(0, 10)
                     .map((request) => (
-                      <div key={request.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                      <div key={request._id || request.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                         <div className="flex items-center space-x-3">
-                          <div className={`w-3 h-3 rounded-full ${leaveTypeConfigs[request.leaveType]?.color || 'bg-gray-500'}`}></div>
+                          <div className={`w-3 h-3 rounded-full ${leaveTypeConfigs[request.leaveType?.toLowerCase()?.replace(' leave', '')]?.color || 'bg-gray-500'}`}></div>
                           <div>
-                            <p className="font-medium">{request.leaveTypeName}</p>
+                            <p className="font-medium">{request.leaveType}</p>
                             <p className="text-sm text-muted-foreground">
                               {new Date(request.startDate).toLocaleDateString()} - {new Date(request.endDate).toLocaleDateString()}
                             </p>
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-medium text-red-600">-{request.daysRequested} days</p>
+                          <p className="font-medium text-red-600">-{request.days} days</p>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(request.submissionDate).toLocaleDateString()}
+                            {new Date(request.submittedAt || request.appliedDate).toLocaleDateString()}
                           </p>
                         </div>
                       </div>
                     ))}
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Info className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No approved leave transactions yet</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }
