@@ -27,13 +27,43 @@ const PORT = process.env.PORT || 5000;
 app.use(helmet({ crossOriginEmbedderPolicy: false, contentSecurityPolicy: false }));
 app.use(process.env.NODE_ENV === 'development' ? morgan('dev') : morgan('combined'));
 
-// CORS - allow multiple origins
-app.use(cors({
-  origin: ['http://localhost:8080', 'http://localhost:3000', 'http://localhost:5173'],
+// CORS - Fixed configuration for production
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, curl, etc.)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    const allowedOrigins = [
+      'https://staff-hive.onrender.com',
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:8080',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:8080'
+    ];
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('⚠️ CORS blocked origin:', origin);
+      console.log('✅ Allowed origins:', allowedOrigins);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-}));
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 600 // Cache preflight for 10 minutes
+};
+
+app.use(cors(corsOptions));
+
+// Explicitly handle preflight requests
+app.options('*', cors(corsOptions));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -82,17 +112,56 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-app.get('/', (req, res) => res.json({ success: true, message: 'Welcome to Staff Hive Central API!' }));
+app.get('/', (req, res) => res.json({ 
+  success: true, 
+  message: 'Welcome to Staff Hive Central API!',
+  frontend: 'https://staff-hive.onrender.com',
+  documentation: 'https://staff-hive-backend.onrender.com/api/health'
+}));
 
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.method} ${req.path} not found`
+  });
+});
+
+// Global error handler
 app.use((err, req, res, next) => {
   console.error('❌ Error:', err.stack);
+  
   if (err.message === 'Not allowed by CORS') {
-    return res.status(403).json({ success: false, message: 'CORS policy violation' });
+    return res.status(403).json({ 
+      success: false, 
+      message: 'CORS policy violation - Origin not allowed',
+      allowedOrigins: [
+        'https://staff-hive.onrender.com',
+        'http://localhost:3000',
+        'http://localhost:5173'
+      ]
+    });
   }
-  res.status(err.status || 500).json({ success: false, message: err.message || 'Internal server error' });
+  
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+  
+  if (err.name === 'UnauthorizedError' || err.name === 'JsonWebTokenError') {
+    return res.status(401).json({ success: false, message: 'Unauthorized access' });
+  }
+  
+  res.status(err.status || 500).json({ 
+    success: false, 
+    message: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`🔗 Frontend allowed origins: http://localhost:8080, http://localhost:3000, http://localhost:5173`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🔗 Backend URL: https://staff-hive-backend.onrender.com`);
+  console.log(`🔗 Frontend URL: https://staff-hive.onrender.com`);
+  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`✅ CORS enabled for: https://staff-hive.onrender.com`);
 });

@@ -1,6 +1,7 @@
 // src/services/api.js - CORRECTED API endpoints
 import axios from 'axios';
 
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://staff-hive-backend.onrender.com/api';
 
 const api = axios.create({
@@ -8,7 +9,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000,
+  timeout: 30000, // Increased timeout for Render
 });
 
 // Add auth token to requests automatically

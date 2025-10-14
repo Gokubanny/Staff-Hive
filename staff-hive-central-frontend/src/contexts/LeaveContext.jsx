@@ -10,8 +10,8 @@ import React, {
 const LeaveContext = createContext();
 
 // API base URL
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://staff-hive-backend.onrender.com/api";
+// In all context files
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://staff-hive-backend.onrender.com/api';
 
 // ---------------------
 // API service functions
