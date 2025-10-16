@@ -240,7 +240,7 @@ const formatCurrency = (amount) => {
   □ server.js updated with new routes
   □ Frontend apiService.js created
   □ Frontend DataContext.jsx updated
-  □ Backend running on http://localhost:5000
+  □ Backend running on https://staff-hive-backend.onrender.com
   □ Frontend connecting to backend successfully
   □ Authentication working
   □ Data operations (CRUD) working
