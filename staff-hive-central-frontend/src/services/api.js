@@ -1,147 +1,221 @@
-// src/services/api.js - CORRECTED API endpoints
+// src/services/api.js - Fixed API Configuration
 import axios from 'axios';
 
-
+// ✅ FIXED: Use environment variable with fallback to production URL
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://staff-hive-backend.onrender.com/api';
 
-const api = axios.create({
+console.log('🔗 API Base URL:', API_BASE_URL);
+
+// Create axios instance with proper configuration
+const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 30000, // 30 second timeout for Render cold starts
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // Increased timeout for Render
+  withCredentials: false, // Set to false for CORS
 });
 
-// Add auth token to requests automatically
-api.interceptors.request.use(
+// Request interceptor - Add auth token
+apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    console.log(`📤 API Request: ${config.method?.toUpperCase()} ${config.url}`);
     return config;
   },
   (error) => {
+    console.error('❌ Request Error:', error);
     return Promise.reject(error);
   }
 );
 
-// Handle response errors globally
-api.interceptors.response.use(
+// Response interceptor - Handle responses and errors
+apiClient.interceptors.response.use(
   (response) => {
-    return response.data;
+    console.log(`✅ API Response: ${response.config.url}`, response.data);
+    return response.data; // Return data directly
   },
   (error) => {
-    console.error('API Error:', error);
+    console.error('❌ API Error:', error);
 
     if (error.response) {
-      const { status, data } = error.response;
-
-      if (status === 401) {
+      // Server responded with error status
+      const errorMessage = error.response.data?.message || error.message;
+      console.error('Server Error:', errorMessage);
+      
+      // Handle unauthorized errors
+      if (error.response.status === 401) {
+        console.log('🔒 Unauthorized - Clearing auth data');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        window.location.href = '/signin';
+        if (window.location.pathname !== '/signin') {
+          window.location.href = '/signin';
+        }
       }
-
-      // Return the actual error message from backend
-      return Promise.reject(new Error(data.message || data.error || 'An error occurred'));
+      
+      return Promise.reject(new Error(errorMessage));
     } else if (error.request) {
+      // Request made but no response received
+      console.error('❌ No response from server:', error.request);
       return Promise.reject(new Error('Network error. Please check your connection.'));
     } else {
-      return Promise.reject(new Error(error.message || 'An unexpected error occurred'));
+      // Something else happened
+      console.error('❌ Request setup error:', error.message);
+      return Promise.reject(error);
     }
   }
 );
 
-// ---------------------- API ENDPOINTS ----------------------
-
-// Authentication API - CORRECTED ENDPOINTS
+// ===== AUTH API =====
 export const authAPI = {
-  register: (userData) => api.post('/auth/register', userData),
-  login: (credentials) => api.post('/auth/login', credentials),
-  getCurrentUser: () => api.get('/auth/user'), // ✅ CHANGED FROM '/auth/me' TO '/auth/user'
-  updateProfile: (profileData) => api.put('/auth/profile', profileData),
-  getProfile: () => api.get('/auth/profile'),
-  changePassword: (passwordData) => api.put('/auth/change-password', passwordData),
-  logout: () => api.post('/auth/logout'),
-  getPendingUsers: () => api.get('/auth/pending-users'),
-  verifyUser: (userId, data) => api.post(`/auth/verify-user/${userId}`, data),
+  register: (userData) => apiClient.post('/auth/register', userData),
+  
+  login: (credentials) => apiClient.post('/auth/login', credentials),
+  
+  logout: () => apiClient.post('/auth/logout'),
+  
+  getCurrentUser: () => apiClient.get('/auth/user'),
+  
+  updateProfile: (profileData) => apiClient.put('/auth/profile', profileData),
+  
+  changePassword: (passwordData) => apiClient.put('/auth/change-password', passwordData),
+  
+  getPendingUsers: () => apiClient.get('/auth/pending-users'),
+  
+  verifyUser: (userId, action, reason = '') => 
+    apiClient.post(`/auth/verify-user/${userId}`, { action, reason }),
 };
 
-// Employee API
-
+// ===== EMPLOYEE API =====
 export const employeeAPI = {
-  getAll: (params) => api.get('/employees', { params }),
-  getById: (id) => api.get(`/employees/${id}`),
-  getByUserId: (userId) => api.get(`/employees/user/${userId}`), // ✅ ADD THIS
-  create: (employeeData) => api.post('/employees', employeeData),
-  update: (id, employeeData) => api.put(`/employees/${id}`, employeeData),
-  delete: (id) => api.delete(`/employees/${id}`),
-  updateStatus: (id, status) => api.patch(`/employees/${id}/status`, { status }),
+  getAll: () => apiClient.get('/employees'),
+  
+  getById: (id) => apiClient.get(`/employees/${id}`),
+  
+  create: (employeeData) => apiClient.post('/employees', employeeData),
+  
+  update: (id, employeeData) => apiClient.put(`/employees/${id}`, employeeData),
+  
+  delete: (id) => apiClient.delete(`/employees/${id}`),
+  
+  getStats: () => apiClient.get('/employees/stats'),
 };
 
-// Company API
+// ===== COMPANY API =====
 export const companyAPI = {
-  getAll: (params) => api.get('/companies', { params }),
-  getById: (id) => api.get(`/companies/${id}`),
-  create: (companyData) => api.post('/companies', companyData),
-  update: (id, companyData) => api.put(`/companies/${id}`, companyData),
-  delete: (id) => api.delete(`/companies/${id}`),
+  getProfile: () => apiClient.get('/companies/profile'),
+  
+  updateProfile: (companyData) => apiClient.put('/companies/profile', companyData),
+  
+  getStats: () => apiClient.get('/companies/stats'),
 };
 
-// Job API
-export const jobAPI = {
-  getAll: (params) => api.get('/jobs', { params }),
-  getById: (id) => api.get(`/jobs/${id}`),
-  create: (jobData) => api.post('/jobs', jobData),
-  update: (id, jobData) => api.put(`/jobs/${id}`, jobData),
-  delete: (id) => api.delete(`/jobs/${id}`),
-};
-
-// Applicant API
+// ===== APPLICANT API =====
 export const applicantAPI = {
-  getAll: (params) => api.get('/applicants', { params }),
-  getById: (id) => api.get(`/applicants/${id}`),
-  create: (applicantData) => api.post('/applicants', applicantData),
-  update: (id, applicantData) => api.put(`/applicants/${id}`, applicantData),
-  updateStage: (id, stage) => api.patch(`/applicants/${id}/stage`, { stage }),
-  delete: (id) => api.delete(`/applicants/${id}`),
+  getAll: () => apiClient.get('/applicants'),
+  
+  getById: (id) => apiClient.get(`/applicants/${id}`),
+  
+  create: (applicantData) => apiClient.post('/applicants', applicantData),
+  
+  update: (id, applicantData) => apiClient.put(`/applicants/${id}`, applicantData),
+  
+  updateStatus: (id, status) => apiClient.patch(`/applicants/${id}/status`, { status }),
+  
+  delete: (id) => apiClient.delete(`/applicants/${id}`),
 };
 
-// Payroll API
+// ===== PAYROLL API =====
 export const payrollAPI = {
-  getAll: (params) => api.get('/payroll', { params }),
-  getById: (id) => api.get(`/payroll/${id}`),
-  create: (payrollData) => api.post('/payroll', payrollData),
-  generate: (employeeIds, period) => api.post('/payroll/generate', { employeeIds, period }),
-  update: (id, payrollData) => api.put(`/payroll/${id}`, payrollData),
-  delete: (id) => api.delete(`/payroll/${id}`),
+  getAll: () => apiClient.get('/payroll'),
+  
+  getById: (id) => apiClient.get(`/payroll/${id}`),
+  
+  create: (payrollData) => apiClient.post('/payroll', payrollData),
+  
+  update: (id, payrollData) => apiClient.put(`/payroll/${id}`, payrollData),
+  
+  delete: (id) => apiClient.delete(`/payroll/${id}`),
+  
+  getStats: () => apiClient.get('/payroll/stats'),
 };
 
-// Analytics API
-export const analyticsAPI = {
-  getDashboard: () => api.get('/analytics/dashboard'),
-  getEmployeeAnalytics: () => api.get('/analytics/employees'),
-  getCompanyAnalytics: () => api.get('/analytics/companies'),
-  getHiringAnalytics: () => api.get('/analytics/hiring'),
+// ===== JOB API =====
+export const jobAPI = {
+  getAll: () => apiClient.get('/jobs'),
+  
+  getById: (id) => apiClient.get(`/jobs/${id}`),
+  
+  create: (jobData) => apiClient.post('/jobs', jobData),
+  
+  update: (id, jobData) => apiClient.put(`/jobs/${id}`, jobData),
+  
+  delete: (id) => apiClient.delete(`/jobs/${id}`),
+  
+  updateStatus: (id, status) => apiClient.patch(`/jobs/${id}/status`, { status }),
 };
 
-// Notifications API - ADDED MISSING EXPORT
-export const notificationsAPI = {
-  getAll: () => api.get('/notifications'),
-  getById: (id) => api.get(`/notifications/${id}`),
-  markAsRead: (id) => api.patch(`/notifications/${id}/read`),
-  create: (notificationData) => api.post('/notifications', notificationData),
-  delete: (id) => api.delete(`/notifications/${id}`),
+// ===== ATTENDANCE API =====
+export const attendanceAPI = {
+  getAll: () => apiClient.get('/attendance'),
+  
+  getById: (id) => apiClient.get(`/attendance/${id}`),
+  
+  create: (attendanceData) => apiClient.post('/attendance', attendanceData),
+  
+  update: (id, attendanceData) => apiClient.put(`/attendance/${id}`, attendanceData),
+  
+  delete: (id) => apiClient.delete(`/attendance/${id}`),
+  
+  getStats: () => apiClient.get('/attendance/stats'),
 };
 
-// Events API - ADDED MISSING EXPORT
-export const eventsAPI = {
-  getAll: () => api.get('/events'),
-  getById: (id) => api.get(`/events/${id}`),
-  create: (eventData) => api.post('/events', eventData),
-  update: (id, eventData) => api.put(`/events/${id}`, eventData),
-  delete: (id) => api.delete(`/events/${id}`),
+// ===== LEAVE API =====
+export const leaveAPI = {
+  getAll: () => apiClient.get('/leave'),
+  
+  getById: (id) => apiClient.get(`/leave/${id}`),
+  
+  create: (leaveData) => apiClient.post('/leave', leaveData),
+  
+  update: (id, leaveData) => apiClient.put(`/leave/${id}`, leaveData),
+  
+  updateStatus: (id, status, reason = '') => 
+    apiClient.patch(`/leave/${id}/status`, { status, reason }),
+  
+  delete: (id) => apiClient.delete(`/leave/${id}`),
+  
+  getStats: () => apiClient.get('/leave/stats'),
 };
 
-export default api;
+// ===== EVENT API =====
+export const eventAPI = {
+  getAll: () => apiClient.get('/events'),
+  
+  getById: (id) => apiClient.get(`/events/${id}`),
+  
+  create: (eventData) => apiClient.post('/events', eventData),
+  
+  update: (id, eventData) => apiClient.put(`/events/${id}`, eventData),
+  
+  delete: (id) => apiClient.delete(`/events/${id}`),
+};
+
+// ===== NOTIFICATION API =====
+export const notificationAPI = {
+  getAll: () => apiClient.get('/notifications'),
+  
+  markAsRead: (id) => apiClient.patch(`/notifications/${id}/read`),
+  
+  markAllAsRead: () => apiClient.patch('/notifications/read-all'),
+  
+  delete: (id) => apiClient.delete(`/notifications/${id}`),
+  
+  getUnreadCount: () => apiClient.get('/notifications/unread-count'),
+};
+
+// Default export
+export default apiClient;
