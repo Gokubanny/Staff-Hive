@@ -1,4 +1,4 @@
-// src/services/api.js - Fixed API Configuration
+// src/services/api.js - Fixed API Configuration with analyticsAPI
 import axios from 'axios';
 
 // ✅ FIXED: Use environment variable with fallback to production URL
@@ -215,6 +215,27 @@ export const notificationAPI = {
   delete: (id) => apiClient.delete(`/notifications/${id}`),
   
   getUnreadCount: () => apiClient.get('/notifications/unread-count'),
+};
+
+// ===== ANALYTICS API ===== (ADDED - This was missing!)
+export const analyticsAPI = {
+  getDashboardStats: () => apiClient.get('/analytics/dashboard'),
+  
+  getEmployeeStats: () => apiClient.get('/analytics/employees'),
+  
+  getAttendanceStats: () => apiClient.get('/analytics/attendance'),
+  
+  getPayrollStats: () => apiClient.get('/analytics/payroll'),
+  
+  getLeaveStats: () => apiClient.get('/analytics/leave'),
+  
+  getRecruitmentStats: () => apiClient.get('/analytics/recruitment'),
+  
+  getPerformanceStats: () => apiClient.get('/analytics/performance'),
+  
+  getOverview: () => apiClient.get('/analytics/overview'),
+  
+  getChartData: (chartType) => apiClient.get(`/analytics/charts/${chartType}`),
 };
 
 // Default export
