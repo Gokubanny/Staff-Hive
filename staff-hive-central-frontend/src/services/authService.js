@@ -1,9 +1,21 @@
 // services/authService.js - Frontend Authentication Service
-// Fixed: Use environment variable or production URL
+// Determine API URL based on environment
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://staff-hive-backend.onrender.com/api';
+const getApiBaseUrl = () => {
+  // For production deployment
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return 'https://staff-hive-backend.onrender.com/api';
+  }
+  
+  // For local development
+  return 'http://localhost:5000/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 console.log('🔗 API Base URL:', API_BASE_URL);
+console.log('🌐 Current Hostname:', window.location.hostname);
+console.log('📍 Full URL:', window.location.href);
 
 class AuthService {
   // Get stored token
