@@ -1,5 +1,9 @@
 // services/authService.js - Frontend Authentication Service
-const API_BASE_URL = 'https://staff-hive-backend.onrender.com/api';
+// Fixed: Use environment variable or production URL
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://staff-hive-backend.onrender.com/api';
+
+console.log('🔗 API Base URL:', API_BASE_URL);
 
 class AuthService {
   // Get stored token
@@ -25,6 +29,8 @@ class AuthService {
     const url = `${API_BASE_URL}${endpoint}`;
     const token = this.getToken();
     
+    console.log(`📤 API Request: ${options.method || 'GET'} ${url}`);
+    
     const config = {
       headers: {
         'Content-Type': 'application/json',
@@ -38,13 +44,15 @@ class AuthService {
       const response = await fetch(url, config);
       const data = await response.json();
       
+      console.log(`✅ API Response:`, data);
+      
       if (!response.ok) {
         throw new Error(data.message || `HTTP error! status: ${response.status}`);
       }
       
       return data;
     } catch (error) {
-      console.error('Auth API Error:', error);
+      console.error('❌ API Error:', error);
       throw error;
     }
   }
@@ -110,7 +118,7 @@ class AuthService {
   // Get current user from backend
   async getCurrentUser() {
     try {
-      const response = await this.apiRequest('/auth/me');
+      const response = await this.apiRequest('/user');
       
       if (response.success) {
         localStorage.setItem('user', JSON.stringify(response.data.user));
