@@ -1,4 +1,4 @@
-// src/pages/admin/LeaveManagement.jsx - Mobile Responsive Version
+// src/components/AdminLeaveManagement.jsx
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, Clock, CheckCircle, XCircle, User, FileText, Filter, Search, 
@@ -35,6 +35,7 @@ const AdminLeaveManagement = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [expandedRequest, setExpandedRequest] = useState(null);
+  const [statistics, setStatistics] = useState(null);
 
   // Load leave requests
   const loadAllLeaveRequests = async (filters = {}) => {
@@ -106,12 +107,56 @@ const AdminLeaveManagement = () => {
     }
   };
 
+  // Get leave statistics
+  const getLeaveStatistics = async (startDate, endDate) => {
+    try {
+      const token = localStorage.getItem('token');
+      const params = new URLSearchParams({ startDate, endDate });
+      
+      const response = await fetch(`${API_BASE_URL}/leave/admin/stats?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        return result.data;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching statistics:', error);
+      return null;
+    }
+  };
+
   const clearError = () => setError(null);
 
   // Load leave requests on component mount
   useEffect(() => {
     loadAllLeaveRequests();
   }, []);
+
+  // Load statistics
+  useEffect(() => {
+    const loadStats = async () => {
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      const endOfMonth = new Date();
+      endOfMonth.setMonth(endOfMonth.getMonth() + 1);
+      endOfMonth.setDate(0);
+      
+      const stats = await getLeaveStatistics(
+        startOfMonth.toISOString().split('T')[0],
+        endOfMonth.toISOString().split('T')[0]
+      );
+      
+      setStatistics(stats);
+    };
+
+    loadStats();
+  }, [leaveRequests]);
 
   const handleApprove = async (request) => {
     setActionLoading(true);
@@ -160,6 +205,7 @@ const AdminLeaveManagement = () => {
     try {
       const exportData = {
         requests: filteredRequests,
+        statistics: statistics,
         filters: { activeTab, searchTerm, filterType, filterDepartment },
         exportDate: new Date().toISOString(),
         totalCount: filteredRequests.length
@@ -229,6 +275,27 @@ const AdminLeaveManagement = () => {
       {/* Mobile-friendly container */}
       <div className="w-full px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:ml-64">
         <div className="max-w-7xl mx-auto">
+          {/* New Request Notification */}
+          {showNotification && (
+            <div className="mb-4 bg-blue-50 border-l-4 border-blue-400 p-3 rounded-lg">
+              <div className="flex items-center">
+                <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400 mr-2 sm:mr-3" />
+                <div className="flex-1">
+                  <p className="text-blue-700 font-medium text-sm sm:text-base">New Leave Request</p>
+                  <p className="text-blue-600 text-xs sm:text-sm">A new leave request has been submitted and is pending your review.</p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="ml-2 text-xs"
+                  onClick={() => setShowNotification(false)}
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Error Display */}
           {error && (
             <Alert variant="destructive" className="mb-4">
@@ -253,7 +320,7 @@ const AdminLeaveManagement = () => {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Leave Management</h1>
-                <p className="text-sm sm:text-base text-gray-600 mt-1">Manage employee leave requests</p>
+                <p className="text-sm sm:text-base text-gray-600 mt-1">Manage employee leave requests and approvals</p>
               </div>
               <div className="flex items-center gap-2">
                 <Button 
@@ -285,7 +352,7 @@ const AdminLeaveManagement = () => {
               <CardContent className="p-3 sm:p-4 lg:p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs sm:text-sm text-yellow-700">Pending</p>
+                    <p className="text-xs sm:text-sm text-yellow-700">Pending Requests</p>
                     <p className="text-xl sm:text-2xl font-bold text-yellow-800">{pendingRequests.length}</p>
                   </div>
                   <div className="relative">
@@ -360,7 +427,7 @@ const AdminLeaveManagement = () => {
                 <div className="relative">
                   <Search className="w-4 h-4 sm:w-5 sm:h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                   <Input
-                    placeholder="Search..."
+                    placeholder="Search by name, ID, or department..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-9 sm:pl-10 text-sm"
@@ -370,7 +437,7 @@ const AdminLeaveManagement = () => {
 
               {/* Filters - Collapsible on mobile */}
               <div className={`${showFilters ? 'block' : 'hidden'} lg:block`}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3 lg:mt-0">
                   <Select value={filterType} onValueChange={setFilterType}>
                     <SelectTrigger className="text-sm">
                       <SelectValue placeholder="All Leave Types" />
@@ -397,7 +464,7 @@ const AdminLeaveManagement = () => {
 
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Filter className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
-                    <span>{filteredRequests.length} of {leaveRequests.length}</span>
+                    <span>{filteredRequests.length} of {leaveRequests.length} requests</span>
                   </div>
                 </div>
               </div>
@@ -412,7 +479,7 @@ const AdminLeaveManagement = () => {
                   { key: 'pending', label: 'Pending', count: pendingRequests.length },
                   { key: 'approved', label: 'Approved', count: approvedRequests.length },
                   { key: 'rejected', label: 'Rejected', count: rejectedRequests.length },
-                  { key: 'all', label: 'All', count: leaveRequests.length }
+                  { key: 'all', label: 'All Requests', count: leaveRequests.length }
                 ].map((tab) => (
                   <button
                     key={tab.key}
@@ -464,6 +531,9 @@ const AdminLeaveManagement = () => {
                               {request.employeeId && `${request.employeeId} • `}
                               {request.department}
                             </p>
+                            {request.email && (
+                              <p className="text-xs text-gray-400 truncate">{request.email}</p>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0 ml-2">
@@ -475,20 +545,24 @@ const AdminLeaveManagement = () => {
                       </div>
 
                       {/* Details Grid - Responsive */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 lg:gap-4 mb-3 sm:mb-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4 mb-3 sm:mb-4">
                         <div>
                           <p className="text-xs text-gray-500">Leave Type</p>
                           <p className="font-medium text-sm sm:text-base">{request.leaveType}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-gray-500">Days</p>
-                          <p className="font-medium text-sm sm:text-base">{request.days || 'N/A'} days</p>
-                        </div>
-                        <div className="sm:col-span-2">
                           <p className="text-xs text-gray-500">Duration</p>
                           <p className="font-medium text-sm sm:text-base">
                             {formatDate(request.startDate)} to {formatDate(request.endDate)}
                           </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Days</p>
+                          <p className="font-medium text-sm sm:text-base">{request.days || 'N/A'} days</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Applied Date</p>
+                          <p className="font-medium text-sm sm:text-base">{formatDate(request.appliedDate || request.submittedAt)}</p>
                         </div>
                       </div>
 
@@ -506,6 +580,14 @@ const AdminLeaveManagement = () => {
                           <p className={`text-gray-900 text-xs sm:text-sm ${expandedRequest === request._id ? 'block' : 'hidden sm:block'}`}>
                             {request.reason}
                           </p>
+                        </div>
+                      )}
+
+                      {/* Emergency Contact */}
+                      {request.emergencyContact && (
+                        <div className="mb-3 sm:mb-4">
+                          <p className="text-xs sm:text-sm text-gray-500 mb-1">Emergency Contact</p>
+                          <p className="text-gray-900 text-xs sm:text-sm">{request.emergencyContact}</p>
                         </div>
                       )}
 

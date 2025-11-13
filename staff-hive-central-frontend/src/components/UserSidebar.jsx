@@ -11,7 +11,8 @@ import {
   ChevronDown,
   Clock,
   Menu,
-  X
+  X,
+  ChevronLeft
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,7 @@ export const UserSidebar = () => {
   const { logout } = useAuth();
   const [expandedGroup, setExpandedGroup] = useState(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const toggleGroup = (title) => {
     setExpandedGroup(expandedGroup === title ? null : title);
@@ -64,6 +66,10 @@ export const UserSidebar = () => {
 
   const closeSidebar = () => {
     setIsOpen(false);
+  };
+
+  const toggleCollapse = () => {
+    setIsCollapsed(!isCollapsed);
   };
 
   return (
@@ -88,78 +94,108 @@ export const UserSidebar = () => {
       )}
 
       {/* Desktop Sidebar */}
-      <div className="w-64 h-full bg-white border-r border-gray-200 fixed top-0 left-0 overflow-y-auto hidden md:block">
-        {/* Sidebar Header */}
-        <div className="p-4 border-b border-gray-100 sticky top-0 bg-white z-10">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-              <Building2 className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <div className="font-semibold text-gray-900 text-sm">Staff Hive</div>
-              <div className="text-xs text-gray-500">Employee Portal</div>
-            </div>
+      <div
+        className={`hidden md:flex fixed left-0 top-0 h-screen bg-white border-r border-gray-200 flex-col transition-all duration-300 ease-in-out z-40 ${
+          isCollapsed ? 'w-20' : 'w-64'
+        }`}
+      >
+        {/* Header */}
+        <div className="p-4 border-b border-gray-100">
+          <div className="flex items-center justify-between">
+            {!isCollapsed && (
+              <div className="flex items-center gap-2 flex-1">
+                <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                  <Building2 className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <div className="font-semibold text-gray-900 text-sm">Staff Hive</div>
+                  <div className="text-xs text-gray-500">Employee Portal</div>
+                </div>
+              </div>
+            )}
+            {isCollapsed && (
+              <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mx-auto">
+                <Building2 className="w-5 h-5 text-white" />
+              </div>
+            )}
+
+            {/* Collapse/Expand Button */}
+            <button
+              onClick={toggleCollapse}
+              className="p-1 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0 ml-2"
+              aria-label="Toggle sidebar collapse"
+            >
+              <ChevronLeft className={`w-5 h-5 text-gray-600 transition-transform ${isCollapsed ? 'rotate-180' : ''}`} />
+            </button>
           </div>
         </div>
-        
-        {/* Main Navigation */}
-        <div className="p-6">
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4">
           <div className="mb-6">
-            <div className="text-xs font-medium text-gray-500 mb-3 uppercase tracking-wide">
-              Main Menu
-            </div>
-            <div className="space-y-4">
+            {!isCollapsed && (
+              <div className="text-xs font-medium text-gray-500 mb-3 uppercase tracking-wide">
+                Main Menu
+              </div>
+            )}
+            <div className="space-y-2">
               {mainItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname.startsWith(item.url);
                 const hasSubItems = item.subItems && item.subItems.length > 0;
-                
+
                 return (
-                  <div key={item.title} className="group">
+                  <div key={item.title}>
                     {hasSubItems ? (
                       <button
                         onClick={() => toggleGroup(item.title)}
                         className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                          isActive 
-                            ? 'bg-blue-50 text-blue-600 font-medium' 
+                          isActive
+                            ? 'bg-blue-50 text-blue-600 font-medium'
                             : 'text-gray-700 hover:bg-gray-50'
                         }`}
+                        title={isCollapsed ? item.title : ''}
                       >
-                        <div className="flex items-center gap-3">
-                          <Icon className="w-4 h-4" />
-                          <span>{item.title}</span>
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <Icon className="w-4 h-4 flex-shrink-0" />
+                          {!isCollapsed && <span className="truncate">{item.title}</span>}
                         </div>
-                        <ChevronDown
-                          className={`w-4 h-4 transition-transform ${
-                            expandedGroup === item.title ? 'rotate-180' : ''
-                          }`}
-                        />
+                        {!isCollapsed && (
+                          <ChevronDown
+                            className={`w-4 h-4 transition-transform flex-shrink-0 ${
+                              expandedGroup === item.title ? 'rotate-180' : ''
+                            }`}
+                          />
+                        )}
                       </button>
                     ) : (
-                      <NavLink 
+                      <NavLink
                         to={item.url}
                         className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                          isActive 
-                            ? 'bg-blue-50 text-blue-600 font-medium' 
+                          isActive
+                            ? 'bg-blue-50 text-blue-600 font-medium'
                             : 'text-gray-700 hover:bg-gray-50'
                         }`}
+                        title={isCollapsed ? item.title : ''}
                       >
-                        <Icon className="w-4 h-4" />
-                        <span>{item.title}</span>
+                        <Icon className="w-4 h-4 flex-shrink-0" />
+                        {!isCollapsed && <span>{item.title}</span>}
                       </NavLink>
                     )}
 
-                    {hasSubItems && expandedGroup === item.title && (
+                    {!isCollapsed && hasSubItems && expandedGroup === item.title && (
                       <div className="ml-8 mt-1 space-y-1">
                         {item.subItems.map((subItem) => (
                           <NavLink
                             key={subItem.title}
                             to={subItem.url}
-                            className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                              isActive
-                                ? 'bg-blue-50 text-blue-600 font-medium'
-                                : 'text-gray-700 hover:bg-gray-50'
-                            }`}
+                            className={({ isActive }) =>
+                              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                                isActive
+                                  ? 'bg-blue-50 text-blue-600 font-medium'
+                                  : 'text-gray-700 hover:bg-gray-50'
+                              }`
+                            }
                           >
                             <span className="w-4 h-4 flex items-center justify-center">
                               <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
@@ -175,45 +211,63 @@ export const UserSidebar = () => {
             </div>
           </div>
 
-          {/* Resources Section */}
-          <div className="mb-6">
-            <div className="text-xs font-medium text-gray-500 mb-3 uppercase tracking-wide">
-              Resources
+          {!isCollapsed && (
+            <div className="mb-6">
+              <div className="text-xs font-medium text-gray-500 mb-3 uppercase tracking-wide">
+                Resources
+              </div>
+              <div className="space-y-1">
+                {secondaryItems.map((item) => {
+                  const Icon = item.icon;
+
+                  return (
+                    <NavLink
+                      key={item.title}
+                      to={item.url}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                          isActive
+                            ? 'bg-blue-50 text-blue-600 font-medium'
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`
+                      }
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span>{item.title}</span>
+                    </NavLink>
+                  );
+                })}
+              </div>
             </div>
-            <div className="space-y-1">
-              {secondaryItems.map((item) => {
-                const Icon = item.icon;
-                
-                return (
-                  <NavLink 
-                    key={item.title}
-                    to={item.url} 
-                    className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                      isActive 
-                        ? 'bg-blue-50 text-blue-600 font-medium' 
-                        : 'text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span>{item.title}</span>
-                  </NavLink>
-                );
-              })}
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Logout Button */}
-        <div className="p-4 border-t border-gray-100 sticky bottom-0 bg-white">
-          <Button 
-            variant="outline" 
-            className="w-full gap-2"
-            onClick={logout}
-          >
-            <LogOut className="h-4 w-4" />
-            Sign Out
-          </Button>
-        </div>
+        {!isCollapsed && (
+          <div className="p-4 border-t border-gray-100">
+            <Button
+              variant="outline"
+              className="w-full gap-2"
+              onClick={logout}
+            >
+              <LogOut className="h-4 w-4" />
+              Sign Out
+            </Button>
+          </div>
+        )}
+
+        {/* Logout Button for Collapsed */}
+        {isCollapsed && (
+          <div className="p-2 border-t border-gray-100">
+            <button
+              onClick={logout}
+              className="w-full p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-700"
+              title="Sign Out"
+            >
+              <LogOut className="h-4 w-4 mx-auto" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Mobile Sidebar */}
@@ -222,8 +276,8 @@ export const UserSidebar = () => {
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        {/* Sidebar Header */}
-        <div className="p-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+        {/* Header */}
+        <div className="p-4 border-b border-gray-100 sticky top-0 bg-white">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
               <Building2 className="w-5 h-5 text-white" />
@@ -234,27 +288,27 @@ export const UserSidebar = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Main Navigation */}
         <div className="p-6">
           <div className="mb-6">
             <div className="text-xs font-medium text-gray-500 mb-3 uppercase tracking-wide">
               Main Menu
             </div>
-            <div className="space-y-4">
+            <div className="space-y-2">
               {mainItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname.startsWith(item.url);
                 const hasSubItems = item.subItems && item.subItems.length > 0;
-                
+
                 return (
-                  <div key={item.title} className="group">
+                  <div key={item.title}>
                     {hasSubItems ? (
                       <button
                         onClick={() => toggleGroup(item.title)}
                         className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                          isActive 
-                            ? 'bg-blue-50 text-blue-600 font-medium' 
+                          isActive
+                            ? 'bg-blue-50 text-blue-600 font-medium'
                             : 'text-gray-700 hover:bg-gray-50'
                         }`}
                       >
@@ -269,12 +323,12 @@ export const UserSidebar = () => {
                         />
                       </button>
                     ) : (
-                      <NavLink 
+                      <NavLink
                         to={item.url}
                         onClick={closeSidebar}
                         className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                          isActive 
-                            ? 'bg-blue-50 text-blue-600 font-medium' 
+                          isActive
+                            ? 'bg-blue-50 text-blue-600 font-medium'
                             : 'text-gray-700 hover:bg-gray-50'
                         }`}
                       >
@@ -290,11 +344,13 @@ export const UserSidebar = () => {
                             key={subItem.title}
                             to={subItem.url}
                             onClick={closeSidebar}
-                            className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                              isActive
-                                ? 'bg-blue-50 text-blue-600 font-medium'
-                                : 'text-gray-700 hover:bg-gray-50'
-                            }`}
+                            className={({ isActive }) =>
+                              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                                isActive
+                                  ? 'bg-blue-50 text-blue-600 font-medium'
+                                  : 'text-gray-700 hover:bg-gray-50'
+                              }`
+                            }
                           >
                             <span className="w-4 h-4 flex items-center justify-center">
                               <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
@@ -318,17 +374,19 @@ export const UserSidebar = () => {
             <div className="space-y-1">
               {secondaryItems.map((item) => {
                 const Icon = item.icon;
-                
+
                 return (
-                  <NavLink 
+                  <NavLink
                     key={item.title}
                     to={item.url}
                     onClick={closeSidebar}
-                    className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                      isActive 
-                        ? 'bg-blue-50 text-blue-600 font-medium' 
-                        : 'text-gray-700 hover:bg-gray-50'
-                    }`}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-600 font-medium'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`
+                    }
                   >
                     <Icon className="w-4 h-4" />
                     <span>{item.title}</span>
@@ -341,8 +399,8 @@ export const UserSidebar = () => {
 
         {/* Logout Button */}
         <div className="p-4 border-t border-gray-100 sticky bottom-0 bg-white">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="w-full gap-2"
             onClick={() => {
               logout();
