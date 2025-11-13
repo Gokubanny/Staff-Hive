@@ -332,7 +332,7 @@ export function AppSidebar() {
                         <span>{item.title}</span>
                       </NavLink>
                     </SidebarMenuButton>
-                  </NavLink>
+                  </SidebarMenuItem>
                 )
               })}
             </SidebarMenu>
