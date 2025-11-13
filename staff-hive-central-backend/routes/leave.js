@@ -1,17 +1,18 @@
 // routes/leave.js
-const express = require("express");
-const router = express.Router();
-const { auth } = require("../middleware/auth");
+import express from "express";
+import { auth } from "../middleware/auth.js";
 
 // Import controllers
-const {
+import {
   submitLeaveRequest,
   getUserLeaveRequests,
   getAllLeaveRequests,
   updateLeaveStatus,
   getLeaveBalance,
   getLeaveStats,
-} = require("../controllers/leaveController");
+} from "../controllers/leaveController.js";
+
+const router = express.Router();
 
 // ====================== Submit Leave ======================
 router.post("/submit", auth, submitLeaveRequest);
@@ -31,4 +32,4 @@ router.get("/balance/:employeeId", auth, getLeaveBalance);
 // ====================== Admin: Leave Statistics ======================
 router.get("/admin/stats", auth, getLeaveStats);
 
-module.exports = router;
+export default router;

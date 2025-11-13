@@ -1,10 +1,10 @@
 // controllers/leaveController.js
-const LeaveRequest = require("../models/LeaveRequest");
-const Employee = require("../models/Employee");
-const User = require("../models/User");
+import LeaveRequest from "../models/LeaveRequest.js";
+import Employee from "../models/Employee.js";
+import User from "../models/User.js";
 
 // ====================== Submit Leave ======================
-exports.submitLeaveRequest = async (req, res) => {
+export const submitLeaveRequest = async (req, res) => {
   try {
     const {
       employeeId,
@@ -95,12 +95,13 @@ exports.submitLeaveRequest = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error submitting leave request",
+      error: error.message
     });
   }
 };
 
 // ====================== User Leave Requests ======================
-exports.getUserLeaveRequests = async (req, res) => {
+export const getUserLeaveRequests = async (req, res) => {
   try {
     const { employeeId } = req.params;
     const userId = req.user.userId;
@@ -132,12 +133,13 @@ exports.getUserLeaveRequests = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching leave requests",
+      error: error.message
     });
   }
 };
 
 // ====================== Admin: All Leave Requests ======================
-exports.getAllLeaveRequests = async (req, res) => {
+export const getAllLeaveRequests = async (req, res) => {
   try {
     const userId = req.user.userId;
     const { status, department, leaveType, page = 1, limit = 50 } = req.query;
@@ -177,15 +179,18 @@ exports.getAllLeaveRequests = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching leave requests",
+      error: error.message
     });
   }
 };
 
 // ====================== Admin: Update Leave Status ======================
-exports.updateLeaveStatus = async (req, res) => {
+export const updateLeaveStatus = async (req, res) => {
   try {
     const { requestId, status, reason = "" } = req.body;
     const userId = req.user.userId;
+
+    console.log('Update leave status request:', { requestId, status, reason, userId });
 
     const user = await User.findById(userId);
     if (!user || user.role !== "admin") {
@@ -272,12 +277,13 @@ exports.updateLeaveStatus = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error updating leave status",
+      error: error.message
     });
   }
 };
 
 // ====================== Employee Leave Balance ======================
-exports.getLeaveBalance = async (req, res) => {
+export const getLeaveBalance = async (req, res) => {
   try {
     const { employeeId } = req.params;
     const userId = req.user.userId;
@@ -393,12 +399,13 @@ exports.getLeaveBalance = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching leave balance",
+      error: error.message
     });
   }
 };
 
 // ====================== Admin: Leave Statistics ======================
-exports.getLeaveStats = async (req, res) => {
+export const getLeaveStats = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     const userId = req.user.userId;
@@ -489,6 +496,7 @@ exports.getLeaveStats = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching leave statistics",
+      error: error.message
     });
   }
 };
