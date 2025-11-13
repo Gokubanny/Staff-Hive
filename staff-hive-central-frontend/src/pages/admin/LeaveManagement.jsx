@@ -1,7 +1,7 @@
 // src/components/AdminLeaveManagement.jsx
 import React, { useState, useEffect } from 'react';
-import { 
-  Calendar, Clock, CheckCircle, XCircle, User, FileText, Filter, Search, 
+import {
+  Calendar, Clock, CheckCircle, XCircle, User, FileText, Filter, Search,
   Bell, Download, RefreshCw, Eye, AlertCircle, Menu, X
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,11 +9,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { 
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
-import { 
-  Dialog, DialogContent, DialogDescription, DialogFooter, 
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -43,7 +43,7 @@ const AdminLeaveManagement = () => {
       setIsLoading(true);
       setError(null);
       const token = localStorage.getItem('token');
-      
+
       const params = new URLSearchParams(filters);
       const response = await fetch(`${API_BASE_URL}/leave/admin/all?${params}`, {
         headers: {
@@ -73,7 +73,7 @@ const AdminLeaveManagement = () => {
       setActionLoading(true);
       setError(null);
       const token = localStorage.getItem('token');
-      
+
       const response = await fetch(`${API_BASE_URL}/leave/admin/update-status`, {
         method: 'PUT',
         headers: {
@@ -84,13 +84,13 @@ const AdminLeaveManagement = () => {
       });
 
       const result = await response.json();
-      
+
       if (response.ok) {
         // Update local state
-        setLeaveRequests(prev => 
-          prev.map(req => 
-            (req._id === requestId || req.requestId === requestId) 
-              ? { ...req, status, rejectionReason: reason } 
+        setLeaveRequests(prev =>
+          prev.map(req =>
+            (req._id === requestId || req.requestId === requestId)
+              ? { ...req, status, rejectionReason: reason }
               : req
           )
         );
@@ -112,7 +112,7 @@ const AdminLeaveManagement = () => {
     try {
       const token = localStorage.getItem('token');
       const params = new URLSearchParams({ startDate, endDate });
-      
+
       const response = await fetch(`${API_BASE_URL}/leave/admin/stats?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -146,12 +146,12 @@ const AdminLeaveManagement = () => {
       const endOfMonth = new Date();
       endOfMonth.setMonth(endOfMonth.getMonth() + 1);
       endOfMonth.setDate(0);
-      
+
       const stats = await getLeaveStatistics(
         startOfMonth.toISOString().split('T')[0],
         endOfMonth.toISOString().split('T')[0]
       );
-      
+
       setStatistics(stats);
     };
 
@@ -226,7 +226,7 @@ const AdminLeaveManagement = () => {
 
   const filteredRequests = leaveRequests.filter(request => {
     const matchesTab = activeTab === 'all' || request.status === activeTab;
-    const matchesSearch = 
+    const matchesSearch =
       (request.employeeName || request.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (request.employeeId || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (request.department || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -273,7 +273,7 @@ const AdminLeaveManagement = () => {
   return (
     <div className="min-h-screen bg-gray-50 pb-20 sm:pb-6">
       {/* Mobile-friendly container */}
-      <div className="w-full px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:ml-64">
+      <div className="min-h-screen px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:ml-64">
         <div className="max-w-7xl mx-auto">
           {/* New Request Notification */}
           {showNotification && (
@@ -284,9 +284,9 @@ const AdminLeaveManagement = () => {
                   <p className="text-blue-700 font-medium text-sm sm:text-base">New Leave Request</p>
                   <p className="text-blue-600 text-xs sm:text-sm">A new leave request has been submitted and is pending your review.</p>
                 </div>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="ml-2 text-xs"
                   onClick={() => setShowNotification(false)}
                 >
@@ -303,9 +303,9 @@ const AdminLeaveManagement = () => {
               <AlertTitle>Error</AlertTitle>
               <AlertDescription className="text-sm">
                 {error}
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="ml-2 h-6 text-xs"
                   onClick={clearError}
                 >
@@ -323,7 +323,7 @@ const AdminLeaveManagement = () => {
                 <p className="text-sm sm:text-base text-gray-600 mt-1">Manage employee leave requests and approvals</p>
               </div>
               <div className="flex items-center gap-2">
-                <Button 
+                <Button
                   variant="outline"
                   size="sm"
                   onClick={() => loadAllLeaveRequests()}
@@ -333,7 +333,7 @@ const AdminLeaveManagement = () => {
                   <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 sm:mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                   <span className="hidden sm:inline">Refresh</span>
                 </Button>
-                <Button 
+                <Button
                   size="sm"
                   onClick={handleExport}
                   disabled={filteredRequests.length === 0}
@@ -484,11 +484,10 @@ const AdminLeaveManagement = () => {
                   <button
                     key={tab.key}
                     onClick={() => setActiveTab(tab.key)}
-                    className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-colors whitespace-nowrap ${
-                      activeTab === tab.key
+                    className={`py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm transition-colors whitespace-nowrap ${activeTab === tab.key
                         ? 'border-blue-500 text-blue-600'
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
+                      }`}
                   >
                     {tab.label} ({tab.count})
                     {tab.key === 'pending' && tab.count > 0 && (
@@ -508,8 +507,8 @@ const AdminLeaveManagement = () => {
                     {leaveRequests.length === 0 ? 'No Leave Requests Yet' : 'No Matching Requests'}
                   </h3>
                   <p className="text-sm text-gray-500">
-                    {leaveRequests.length === 0 
-                      ? "No leave requests have been submitted yet" 
+                    {leaveRequests.length === 0
+                      ? "No leave requests have been submitted yet"
                       : 'No requests match your current filters'}
                   </p>
                 </div>
@@ -607,12 +606,11 @@ const AdminLeaveManagement = () => {
                             onClick={() => handleApprove(request)}
                             disabled={actionLoading}
                             className="bg-green-600 hover:bg-green-700 text-white text-sm w-full sm:w-auto"
-                            size="sm"
                           >
                             {actionLoading ? (
-                              <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2 animate-spin" />
+                              <RefreshCw className="w-4 h-4 mr-2 sm:w-4 sm:h-4 sm:mr-2 animate-spin" />
                             ) : (
-                              <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-2" />
+                              <CheckCircle className="w-4 h-4 mr-2 sm:w-4 sm:h-4 sm:mr-2" />
                             )}
                             Approve
                           </Button>
