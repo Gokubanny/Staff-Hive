@@ -1,3 +1,4 @@
+// src/components/UserSidebar.jsx - UPDATED
 import { useState } from "react";
 import { 
   Home,
@@ -17,6 +18,7 @@ import {
 import { NavLink, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSidebar } from '@/contexts/SidebarContext'; // ADD THIS IMPORT
 
 const mainItems = [
   { title: "Dashboard", url: "/user-dashboard", icon: Home },
@@ -53,19 +55,20 @@ export const UserSidebar = () => {
   const location = useLocation();
   const { logout } = useAuth();
   const [expandedGroup, setExpandedGroup] = useState(null);
-  const [isOpen, setIsOpen] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  
+  // REPLACE these useState with useSidebar hook
+  const { isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen } = useSidebar();
 
   const toggleGroup = (title) => {
     setExpandedGroup(expandedGroup === title ? null : title);
   };
 
   const toggleSidebar = () => {
-    setIsOpen(!isOpen);
+    setIsMobileOpen(!isMobileOpen);
   };
 
   const closeSidebar = () => {
-    setIsOpen(false);
+    setIsMobileOpen(false);
   };
 
   const toggleCollapse = () => {
@@ -81,12 +84,12 @@ export const UserSidebar = () => {
           className="p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
           aria-label="Toggle sidebar"
         >
-          {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
       </div>
 
       {/* Mobile Overlay */}
-      {isOpen && (
+      {isMobileOpen && (
         <div
           className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
           onClick={closeSidebar}
@@ -273,7 +276,7 @@ export const UserSidebar = () => {
       {/* Mobile Sidebar */}
       <div
         className={`md:hidden fixed top-0 left-0 h-full w-64 bg-white border-r border-gray-200 transition-transform duration-300 ease-in-out z-40 overflow-y-auto ${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
+          isMobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Header */}

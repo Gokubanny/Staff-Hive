@@ -1,12 +1,20 @@
-// controllers/authController.js
+// controllers/authController.js - Updated with company creation
 const User = require('../models/User');
-const Employee = require('../models/Employee');
-const Notification = require('../models/Notification');
-const bcrypt = require('bcryptjs');
+const Company = require('../models/Company');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const { validationResult } = require('express-validator');
 
-// Register user
+// Generate JWT token
+const generateToken = (userId) => {
+  return jwt.sign(
+    { userId },
+    process.env.JWT_SECRET || 'your-secret-key',
+    { expiresIn: '7d' }
+  );
+};
+
+// Register new user
 exports.register = async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -21,7 +29,7 @@ exports.register = async (req, res) => {
     const { name, email, password, role, employeeId, companyName } = req.body;
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
       return res.status(400).json({
         success: false,
@@ -29,87 +37,106 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Check if employeeId already exists
-    if (employeeId) {
-      const existingEmployeeId = await User.findOne({ employeeId: employeeId.trim() });
-      if (existingEmployeeId) {
-        return res.status(400).json({
-          success: false,
-          message: 'Employee ID already exists'
-        });
-      }
-    }
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create new user
+    // Create user
     const newUser = new User({
       name: name.trim(),
       email: email.toLowerCase().trim(),
-      password,
+      password: hashedPassword,
       role: role || 'user',
-      employeeId: employeeId ? employeeId.trim() : undefined,
-      companyName: companyName ? companyName.trim() : 'Unknown Company',
-      isVerified: role === 'admin',
+      employeeId: employeeId?.trim(),
+      companyName: companyName.trim(),
+      isActive: role === 'admin', // Auto-approve admins
       verificationStatus: role === 'admin' ? 'approved' : 'pending'
     });
 
     await newUser.save();
 
-    // If user is admin, generate token immediately
+    // **NEW: Create basic company profile for admin users**
     if (role === 'admin') {
-      const token = jwt.sign(
-        { userId: newUser._id },
-        process.env.JWT_SECRET || 'your-secret-key',
-        { expiresIn: '24h' }
-      );
+      try {
+        // Check if company already exists for this user
+        const existingCompany = await Company.findOne({
+          name: companyName.trim(),
+          userId: newUser._id
+        });
 
-      const userResponse = newUser.toObject();
-      delete userResponse.password;
+        if (!existingCompany) {
+          // Create basic company profile
+          const basicCompany = new Company({
+            name: companyName.trim(),
+            businessType: 'Other', // Default value
+            registrationNumber: 'PENDING', // Placeholder
+            taxId: 'PENDING', // Placeholder
+            industry: 'Other', // Default value
+            size: '1-10', // Default smallest size
+            description: `Company profile for ${companyName.trim()}. Please update with complete information.`,
+            streetAddress: 'To be updated',
+            city: 'To be updated',
+            state: 'Lagos', // Default state
+            postalCode: '100001',
+            location: 'To be updated',
+            phone: 'To be updated',
+            email: email.toLowerCase().trim(), // Use admin's email as company email
+            employeeCount: '1-10',
+            hrContactName: name.trim(),
+            hrContactEmail: email.toLowerCase().trim(),
+            hrContactPhone: 'To be updated',
+            userId: newUser._id,
+            isActive: true
+          });
 
-      return res.status(201).json({
-        success: true,
-        message: 'Admin user created successfully',
-        data: {
-          user: userResponse,
-          token
+          await basicCompany.save();
+          console.log(`✅ Created basic company profile for: ${companyName}`);
         }
-      });
+      } catch (companyError) {
+        // Log error but don't fail registration
+        console.error('⚠️ Error creating company profile:', companyError);
+      }
     }
 
-    // For regular users, find admin to send notification
-    const adminUser = await User.findOne({ 
-      companyName: newUser.companyName, 
-      role: 'admin' 
-    });
+    // Generate token
+    const token = generateToken(newUser._id);
 
-    if (adminUser) {
-      await Notification.createVerificationRequest(adminUser._id, newUser);
-    }
-
-    const userResponse = newUser.toObject();
-    delete userResponse.password;
+    // Return user data (excluding password)
+    const userResponse = {
+      _id: newUser._id,
+      name: newUser.name,
+      email: newUser.email,
+      role: newUser.role,
+      employeeId: newUser.employeeId,
+      companyName: newUser.companyName,
+      isActive: newUser.isActive,
+      verificationStatus: newUser.verificationStatus
+    };
 
     res.status(201).json({
       success: true,
-      message: 'User registered successfully. Waiting for admin approval.',
+      message: role === 'admin' 
+        ? 'Admin account created successfully. Complete your company profile.' 
+        : 'Registration successful. Awaiting admin approval.',
       data: {
         user: userResponse,
-        requiresVerification: true
-      }
+        token: role === 'admin' ? token : null // Only return token for admins
+      },
+      requiresVerification: role !== 'admin'
     });
-
   } catch (error) {
     console.error('Registration error:', error);
     
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
-        message: 'User with this email or employee ID already exists'
+        message: 'User with this email already exists'
       });
     }
-    
+
     res.status(500).json({
       success: false,
-      message: 'Error creating user',
+      message: 'Error during registration',
       error: error.message
     });
   }
@@ -127,11 +154,30 @@ exports.login = async (req, res) => {
       });
     }
 
-    const { email, password } = req.body;
+    const { email, password, role } = req.body;
 
-    // Find user
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    // Find user by email
+    const user = await User.findOne({ email: email.toLowerCase() });
+    
     if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password'
+      });
+    }
+
+    // Check if role matches
+    if (role && user.role !== role) {
+      return res.status(401).json({
+        success: false,
+        message: `Invalid credentials for ${role} login`
+      });
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    
+    if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password'
@@ -140,42 +186,26 @@ exports.login = async (req, res) => {
 
     // Check if user is active
     if (!user.isActive) {
-      return res.status(401).json({
+      return res.status(403).json({
         success: false,
-        message: 'Account has been deactivated. Please contact administrator.'
+        message: 'Account is pending approval or has been deactivated. Please contact your administrator.'
       });
     }
-
-    // Check if user is verified (for regular users)
-    if (user.role === 'user' && !user.isVerified) {
-      return res.status(401).json({
-        success: false,
-        message: 'Your account is pending approval. Please wait for admin verification.'
-      });
-    }
-
-    // Check password
-    const isPasswordValid = await user.comparePassword(password);
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password'
-      });
-    }
-
-    // Update last login
-    user.lastLogin = new Date();
-    await user.save();
 
     // Generate token
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '24h' }
-    );
+    const token = generateToken(user._id);
 
-    const userResponse = user.toObject();
-    delete userResponse.password;
+    // Return user data (excluding password)
+    const userResponse = {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      employeeId: user.employeeId,
+      companyName: user.companyName,
+      isActive: user.isActive,
+      verificationStatus: user.verificationStatus
+    };
 
     res.json({
       success: true,
@@ -185,7 +215,6 @@ exports.login = async (req, res) => {
         token
       }
     });
-
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({
@@ -211,7 +240,16 @@ exports.getCurrentUser = async (req, res) => {
     res.json({
       success: true,
       data: {
-        user
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          employeeId: user.employeeId,
+          companyName: user.companyName,
+          isActive: user.isActive,
+          verificationStatus: user.verificationStatus
+        }
       }
     });
   } catch (error) {
@@ -224,37 +262,54 @@ exports.getCurrentUser = async (req, res) => {
   }
 };
 
-// Get pending users
-exports.getPendingUsers = async (req, res) => {
+// Update user profile
+exports.updateProfile = async (req, res) => {
   try {
-    const pendingUsers = await User.find({
-      verificationStatus: 'pending',
-      role: 'user',
-      companyName: req.user.companyName
-    }).select('-password').sort({ createdAt: -1 });
+    const { name, email, employeeId, companyName } = req.body;
+    
+    const updateData = {};
+    if (name) updateData.name = name.trim();
+    if (email) updateData.email = email.toLowerCase().trim();
+    if (employeeId) updateData.employeeId = employeeId.trim();
+    if (companyName) updateData.companyName = companyName.trim();
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.userId,
+      updateData,
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
 
     res.json({
       success: true,
-      data: pendingUsers,
-      count: pendingUsers.length
+      message: 'Profile updated successfully',
+      data: {
+        user: updatedUser
+      }
     });
   } catch (error) {
-    console.error('Error fetching pending users:', error);
+    console.error('Update profile error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching pending users',
+      message: 'Error updating profile',
       error: error.message
     });
   }
 };
 
-// Verify user (Approve/Reject)
-exports.verifyUser = async (req, res) => {
+// Change password
+exports.changePassword = async (req, res) => {
   try {
-    const { action, reason } = req.body;
-    const { userId } = req.params;
+    const { currentPassword, newPassword } = req.body;
 
-    const user = await User.findById(userId);
+    const user = await User.findById(req.user.userId);
+    
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -262,103 +317,31 @@ exports.verifyUser = async (req, res) => {
       });
     }
 
-    // Check if user belongs to same company as admin
-    if (user.companyName !== req.user.companyName) {
-      return res.status(403).json({
+    // Verify current password
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    
+    if (!isPasswordValid) {
+      return res.status(401).json({
         success: false,
-        message: 'You can only verify users from your company'
+        message: 'Current password is incorrect'
       });
     }
 
-    if (action === 'approve') {
-      // Update user verification status
-      user.isVerified = true;
-      user.verificationStatus = 'approved';
-      user.verifiedBy = req.user.userId;
-      user.verifiedAt = new Date();
-      await user.save();
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    
+    await user.save();
 
-      // Create employee record automatically
-      try {
-        const nameParts = user.name.split(' ');
-        const firstName = nameParts[0] || user.name;
-        const lastName = nameParts.slice(1).join(' ') || user.name;
-
-        const employeeData = {
-          firstName: firstName,
-          lastName: lastName,
-          email: user.email,
-          phone: 'To be updated',
-          dateOfBirth: new Date('1990-01-01'),
-          gender: 'Prefer not to say',
-          employeeId: user.employeeId || `EMP${Date.now()}`,
-          position: 'Employee',
-          department: 'General',
-          startDate: new Date(),
-          salary: 0,
-          employmentType: 'Full-time',
-          status: 'Active',
-          address: {
-            street: 'To be updated',
-            city: 'To be updated',
-            state: 'To be updated',
-            postalCode: 'To be updated'
-          },
-          emergencyContact: {
-            name: 'To be updated',
-            relationship: 'To be updated',
-            phone: 'To be updated'
-          },
-          companyId: req.user.companyId,
-          userId: user._id,
-          createdBy: req.user.userId
-        };
-
-        const newEmployee = new Employee(employeeData);
-        await newEmployee.save();
-
-        console.log(`✅ Employee record created for: ${user.name}`);
-
-      } catch (employeeError) {
-        console.error('❌ Error creating employee record:', employeeError);
-        // Continue with user approval even if employee creation fails
-      }
-
-      // Send approval notification
-      await Notification.createApprovalNotification(user._id, req.user.name);
-
-      return res.json({
-        success: true,
-        message: 'User approved successfully and employee record created',
-        data: { user }
-      });
-
-    } else if (action === 'reject') {
-      // Update user verification status
-      user.verificationStatus = 'rejected';
-      user.rejectionReason = reason;
-      await user.save();
-
-      // Send rejection notification
-      await Notification.createRejectionNotification(user._id, reason);
-
-      return res.json({
-        success: true,
-        message: 'User rejected successfully',
-        data: { user }
-      });
-    } else {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid action. Use "approve" or "reject"'
-      });
-    }
-
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
+    });
   } catch (error) {
-    console.error('Error verifying user:', error);
+    console.error('Change password error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error processing verification',
+      message: 'Error changing password',
       error: error.message
     });
   }
@@ -367,9 +350,10 @@ exports.verifyUser = async (req, res) => {
 // Logout user
 exports.logout = async (req, res) => {
   try {
+    // In a more complex system, you might invalidate the token here
     res.json({
       success: true,
-      message: 'Logout successful'
+      message: 'Logged out successfully'
     });
   } catch (error) {
     console.error('Logout error:', error);
@@ -380,3 +364,77 @@ exports.logout = async (req, res) => {
     });
   }
 };
+
+// Get pending users (admin only)
+exports.getPendingUsers = async (req, res) => {
+  try {
+    const pendingUsers = await User.find({
+      verificationStatus: 'pending',
+      role: 'user'
+    }).select('-password').sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: pendingUsers
+    });
+  } catch (error) {
+    console.error('Get pending users error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching pending users',
+      error: error.message
+    });
+  }
+};
+
+// Verify user (admin only)
+exports.verifyUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { action, reason } = req.body;
+
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (action === 'approve') {
+      user.verificationStatus = 'approved';
+      user.isActive = true;
+      await user.save();
+
+      return res.json({
+        success: true,
+        message: 'User approved successfully'
+      });
+    } else if (action === 'reject') {
+      user.verificationStatus = 'rejected';
+      user.isActive = false;
+      user.rejectionReason = reason;
+      await user.save();
+
+      return res.json({
+        success: true,
+        message: 'User rejected successfully'
+      });
+    }
+
+    res.status(400).json({
+      success: false,
+      message: 'Invalid action'
+    });
+  } catch (error) {
+    console.error('Verify user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error verifying user',
+      error: error.message
+    });
+  }
+};
+
+module.exports = exports;

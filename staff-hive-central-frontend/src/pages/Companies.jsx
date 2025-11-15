@@ -1,4 +1,4 @@
-//pages/companies
+// pages/Companies.jsx - Updated with profile completion alert
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
@@ -13,8 +13,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Search, Edit, Trash2, Building2 } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Building2, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function Companies() {
   const navigate = useNavigate();
@@ -50,6 +52,19 @@ export default function Companies() {
     }
   };
 
+  // Check if company profile needs completion
+  const needsCompletion = (company) => {
+    return (
+      company.registrationNumber === 'PENDING' ||
+      company.taxId === 'PENDING' ||
+      company.streetAddress === 'To be updated' ||
+      company.phone === 'To be updated' ||
+      company.hrContactPhone === 'To be updated'
+    );
+  };
+
+  const incompleteCompanies = companies.filter(needsCompletion);
+
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
@@ -65,6 +80,27 @@ export default function Companies() {
         </div>
       </div>
 
+      {/* Profile Completion Alert */}
+      {incompleteCompanies.length > 0 && (
+        <Alert className="border-orange-200 bg-orange-50">
+          <AlertCircle className="h-4 w-4 text-orange-600" />
+          <AlertTitle className="text-orange-800 font-semibold">
+            Complete Your Company Profile
+          </AlertTitle>
+          <AlertDescription className="text-orange-700">
+            {incompleteCompanies.length === 1 ? (
+              <>
+                Your company profile needs to be completed. Click the "Edit" button to add complete information.
+              </>
+            ) : (
+              <>
+                {incompleteCompanies.length} company profiles need to be completed with full information.
+              </>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <div>
@@ -76,9 +112,13 @@ export default function Companies() {
               Manage all companies in your network
             </CardDescription>
           </div>
-          <Button onClick={() => navigate('/dashboard/add-company')} style={{
-              background:
-                "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)))", display: 'flex'}}>
+          <Button 
+            onClick={() => navigate('/dashboard/add-company')} 
+            style={{
+              background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)))", 
+              display: 'flex'
+            }}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Add Company
           </Button>
@@ -102,39 +142,74 @@ export default function Companies() {
                   <TableHead>Industry</TableHead>
                   <TableHead>Location</TableHead>
                   <TableHead>Size</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Founded</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredCompanies.map((company) => (
-                  <TableRow key={company._id}>
-                    <TableCell className="font-medium">{company.name}</TableCell>
-                    <TableCell>{company.industry}</TableCell>
-                    <TableCell>{company.location}</TableCell>
-                    <TableCell>{company.size}</TableCell>
-                    <TableCell>{company.founded || 'N/A'}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate(`/dashboard/edit-company/${company._id}`)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDelete(company._id, company.name)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filteredCompanies.map((company) => {
+                  const incomplete = needsCompletion(company);
+                  
+                  return (
+                    <TableRow key={company._id} className={incomplete ? 'bg-orange-50/50' : ''}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {company.name}
+                          {incomplete && (
+                            <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300">
+                              Incomplete
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>{company.industry}</TableCell>
+                      <TableCell>
+                        {company.location === 'To be updated' ? (
+                          <span className="text-orange-600 italic">Not set</span>
+                        ) : (
+                          company.location
+                        )}
+                      </TableCell>
+                      <TableCell>{company.size}</TableCell>
+                      <TableCell>
+                        {incomplete ? (
+                          <Badge variant="outline" className="bg-orange-100 text-orange-800">
+                            <AlertCircle className="h-3 w-3 mr-1" />
+                            Needs Update
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-green-100 text-green-800">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            Complete
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>{company.founded || 'N/A'}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end space-x-2">
+                          <Button
+                            variant={incomplete ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => navigate(`/dashboard/edit-company/${company._id}`)}
+                            className={incomplete ? 'bg-orange-600 hover:bg-orange-700' : ''}
+                          >
+                            <Edit className="h-4 w-4 mr-1" />
+                            {incomplete ? 'Complete Profile' : 'Edit'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDelete(company._id, company.name)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -152,7 +227,7 @@ export default function Companies() {
                   : 'Start by adding your first company to the directory.'}
               </p>
               {!searchTerm && (
-                <Button onClick={() => navigate('/add-companies')}>
+                <Button onClick={() => navigate('/dashboard/add-company')}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add First Company
                 </Button>

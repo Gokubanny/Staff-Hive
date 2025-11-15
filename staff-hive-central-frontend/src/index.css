@@ -127,3 +127,79 @@
     @apply bg-background text-foreground;
   }
 } */
+
+
+/* Add these styles to your global CSS or Tailwind config */
+
+/* Ensure proper spacing for content when sidebar is present */
+@media (max-width: 768px) {
+  /* Adjust main content padding for mobile */
+  .main-content {
+    padding-top: 70px !important; /* Space for mobile menu button */
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  /* Remove desktop sidebar margin on mobile */
+  .ml-64 {
+    margin-left: 0 !important;
+  }
+
+  /* Make sure header content doesn't hide under menu button */
+  .page-header {
+    margin-top: 20px;
+  }
+}
+
+/* Desktop - keep sidebar spacing */
+@media (min-width: 768px) {
+  .main-content {
+    margin-left: 256px; /* 64 * 4 = 256px for w-64 sidebar */
+    transition: margin-left 0.3s ease-in-out;
+  }
+
+  .main-content.collapsed {
+    margin-left: 80px; /* 20 * 4 = 80px for w-20 collapsed sidebar */
+  }
+}
+
+/* Prevent body scroll when mobile menu is open */
+body.mobile-menu-open {
+  overflow: hidden;
+}
+
+/* Smooth transitions for mobile menu */
+.mobile-sidebar-enter {
+  transform: translateX(-100%);
+}
+
+.mobile-sidebar-enter-active {
+  transform: translateX(0);
+  transition: transform 300ms ease-in-out;
+}
+
+.mobile-sidebar-exit {
+  transform: translateX(0);
+}
+
+.mobile-sidebar-exit-active {
+  transform: translateX(-100%);
+  transition: transform 300ms ease-in-out;
+}
+
+/* Ensure z-index layers are correct */
+.mobile-menu-button {
+  z-index: 100;
+}
+
+.mobile-sidebar {
+  z-index: 95;
+}
+
+.mobile-overlay {
+  z-index: 90;
+}
+
+.desktop-sidebar {
+  z-index: 80;
+}
