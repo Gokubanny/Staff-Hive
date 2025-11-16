@@ -140,7 +140,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="space-y-6 ml-64">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

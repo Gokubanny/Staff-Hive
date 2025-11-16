@@ -127,7 +127,7 @@ const PendingUsers = () => {
   }
 
   return (
-    <div className="p-6 ml-64 space-y-6">
+    <div className="p-6 space-y-6">
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">

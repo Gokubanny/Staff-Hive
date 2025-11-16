@@ -265,7 +265,7 @@ export default function AdminJobPosting() {
   };
 
   return (
-    <div className="space-y-6 ml-64 p-6">
+    <div className="space-y-6 p-6">
       {/* Header & Create Button */}
       <div className="flex items-center justify-between">
         <div>

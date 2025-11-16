@@ -85,7 +85,7 @@ const AdminAllJob = () => {
   }
 
   return (
-    <div className="p-6 ml-64">
+    <div className="p-6">
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

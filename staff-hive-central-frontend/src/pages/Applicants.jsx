@@ -149,7 +149,7 @@ export default function Applicants() {
   }
 
   return (
-    <div className="space-y-6 ml-64">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Applicant Management</h1>

@@ -191,7 +191,7 @@ export default function Employees() {
   const statuses = getUniqueStatuses();
 
   return (
-    <div className="px-6 py-8 ml-64">
+    <div className="px-6 py-8">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <div>

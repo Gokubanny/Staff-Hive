@@ -172,7 +172,7 @@ const AdminAttendance = () => {
 
   // --- JSX ---
   return (
-    <div className="p-4 md:p-6 space-y-6 bg-gray-50 min-h-screen ml-64">
+    <div className="p-4 md:p-6 space-y-6 bg-gray-50 min-h-screen">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">

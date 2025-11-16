@@ -70,7 +70,7 @@ export default function Companies() {
   }
 
   return (
-    <div className="space-y-6 ml-64">
+    <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Companies</h1>
